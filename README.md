@@ -7,7 +7,7 @@ Form the terminal, you can install the required packages by moving to the locati
 pip install -r requirements.txt
 ```
 
-Then, you can fill the '''config.py''' file with the information from your experiment and save the changes. This is the only file that you should need to modify. Once everything is setup you can run the tool.
+Then, you can fill the ''config.py'' file with the information from your experiment and save the changes. This is the only file that you should need to modify. Once everything is setup you can run the tool.
 
 
 On your terminal you can execute:
