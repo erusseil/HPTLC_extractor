@@ -1,4 +1,4 @@
-This small python package has been made to enable the conversion from HPTLC image to csv files, with the aim of creating standardize databases.
+This small python package has been made to enable the conversion from HTPLC image to csv files, with the aim of creating standardize databases.
 
 The tool was developped Python 3.8. It requires python to be install on your machine.
 Form the terminal, you can install the required packages by moving to the location of the hptlc package and running the following command:
