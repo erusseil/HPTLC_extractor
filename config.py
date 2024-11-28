@@ -1,12 +1,11 @@
 #Setup of the machine
-length = 80.0
-front = 70.0
-X_offset = 22.0
-Y_offset = 8.0
-spot_size = 8.0
-inter_spot_dist = 12.0
+length = 80.0 #Length of the plate
+front = 70.0 #Distance from the spot to the front
+X_offset = 22.0 #Distance from the left of the plate, to the center of the first spot
+Y_offset = 8.0 #Distance from the bottom of the plate, to the center of the spots
+inter_spot_dist = 12.0 #Distance between two spot centers
 
-# Names of the products
+# Names of the products. They should be in the same order as deposited on the plate.
 names = ['sample_0',
  'sample_1',
  'sample_2',
