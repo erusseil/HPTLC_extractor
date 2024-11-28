@@ -1,3 +1,5 @@
+# HPTLC Extractor
+
 This small python package has been made to enable the conversion from HTPLC image to csv files, with the aim of creating standardize databases.
 
 ## Installation
