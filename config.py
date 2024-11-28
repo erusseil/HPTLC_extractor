@@ -22,7 +22,7 @@ names = ['sample_0',
  'sample_13']
 
 # Path to the image
-path = 'images/Data test p-anisaldehyde Visible.png'
+path = 'path/to/the/image.png'
 
 # Scientific variables
 # NB: This is only required for the production of the standardize database, i.e. using main()
