@@ -110,13 +110,13 @@ def show_curve():
     
     for path in config.show:
         
-        curve = np.loadtxt(path, delimiter=",")
+        curve = np.loadtxt(os.path.normpath(path), delimiter=",")
         colors = ['r', 'g', 'b']
 
         for i in range(3):
             plt.plot(curve[:, i], color=colors[i])
 
-        plt.title(os.path.normpath(path))
+        plt.title(path)
         plt.ylim(0, 255)
         plt.show()
 
