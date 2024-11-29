@@ -8,7 +8,7 @@ class HPTLC_extracter():
     main_folder_path = 'HPTLC_data/'
     stardard_eluants = ['LPDS', 'MPDS', 'HPDS']
     standard_observations = ['254nm', '366nm', 'visible', 'developer']
-    half_window = 25
+    half_window = 20
     extra = 25
 
     def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
@@ -56,13 +56,13 @@ class HPTLC_extracter():
             top = int(bottom - front/pixel_size - extra)
         
             rectangle = image[bottom:top:-1, center - half_window : center + half_window, :3]
-            averaged = np.mean(rectangle, axis=1)
-            all_samples.append(averaged)
+            medianed = np.median(rectangle, axis=1)
+            all_samples.append(medianed)
 
             if save:
                 if not os.path.isdir('single_hptlc'):
                     os.makedirs('single_hptlc')
-                np.savetxt(f"single_hptlc/{names[n]}.csv", averaged, delimiter=",")
+                np.savetxt(f"single_hptlc/{names[n]}.csv", medianed, delimiter=",")
 
         if save==False:
             return np.array(all_samples)
