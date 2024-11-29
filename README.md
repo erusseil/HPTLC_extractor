@@ -20,7 +20,7 @@ Then, you should fill the `config.py` file with the information from your experi
 
 On your terminal you can execute:
 ```sh
-python -c 'import hptlc; hptlc.main()'
+python -c "import hptlc; hptlc.main()"
 ```
 
 This will result in the creation of well structured, standardized, storage folders. However, it requires standard HPTLC procedures and does not allow anything else. 
@@ -28,7 +28,7 @@ This will result in the creation of well structured, standardized, storage folde
 
 If you want a simple conversion, even outside of the standard procedure, you can simply run:
 ```sh
-python -c 'import hptlc; hptlc.single()'
+python -c "import hptlc; hptlc.single()"
 ```
 
 In that case it will drop all the results in a single folder.
@@ -36,7 +36,7 @@ In that case it will drop all the results in a single folder.
 
 Finally, if you want to visualize some csv files you can run:
 ```sh
-python -c 'import hptlc; hptlc.show_curve()'
+python -c "import hptlc; hptlc.show_curve()"
 ```
 
 It will show all the HPTLC curves specified in the variable "show" from the `config.py` file.
