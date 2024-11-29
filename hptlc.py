@@ -58,7 +58,7 @@ class HPTLC_extracter():
             rectangle = image[bottom:top:-1, center - half_window : center + half_window, :3]
             averaged = np.mean(rectangle, axis=1)
             all_samples.append(averaged)
-os.path.normpath(path)
+
             if save:
                 if not os.path.isdir('single_hptlc'):
                     os.makedirs('single_hptlc')
