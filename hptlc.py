@@ -8,7 +8,8 @@ class HPTLC_extracter():
     main_folder_path = 'HPTLC_data/'
     stardard_eluants = ['LPDS', 'MPDS', 'HPDS']
     standard_observations = ['254nm', '366nm', 'visible', 'developer']
-    half_window = 5
+    half_window = 25
+    extra = 25
 
     def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
 
@@ -19,7 +20,7 @@ class HPTLC_extracter():
             raise ValueError('Only 254nm, 366nm, visible, or developer, are accepted as standard observation.')
 
         self.names = names
-        self.path = path
+        self.path = os.path.normpath(path)
         self.length = length
         self.front = front
         self.X_offset = X_offset
@@ -42,18 +43,19 @@ class HPTLC_extracter():
     @staticmethod
     def convert_image_to_array(path, length, X_offset, Y_offset, front, inter_spot_dist, names, save=False):
         
-        image = iio.imread(path)
+        image = iio.imread(os.path.normpath(path))
         pixel_size = length/np.shape(image)[1]
         half_window = HPTLC_extracter.half_window
+        extra = HPTLC_extracter.extra
         space = inter_spot_dist/pixel_size
 
         all_samples = []
         for n in range(len(names)):
-            center = int(X_offset/pixel_size + n * inter_spot_dist)
-            bottom = int(np.shape(image)[0] - Y_offset/pixel_size)
-            top = int(bottom - front/pixel_size)
+            center = int(X_offset/pixel_size + n * inter_spot_dist/pixel_size)
+            bottom = int(np.shape(image)[0] - Y_offset/pixel_size + extra)
+            top = int(bottom - front/pixel_size - extra)
         
-            rectangle = image[top:bottom, center - half_window : center + half_window, :3]
+            rectangle = image[bottom:top:-1, center - half_window : center + half_window, :3]
             averaged = np.mean(rectangle, axis=1)
             all_samples.append(averaged)
 
@@ -115,6 +117,7 @@ def show_curve():
             plt.plot(curve[:, i], color=colors[i])
 
         plt.title(path)
+        plt.ylim(0, 255)
         plt.show()
 
     
