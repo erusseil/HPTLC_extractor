@@ -9,7 +9,7 @@ class HPTLC_extracter():
     stardard_eluants = ['LPDS', 'MPDS', 'HPDS']
     standard_observations = ['254nm', '366nm', 'visible', 'developer']
     half_window = 25
-    extra = 25
+    extra = 50
 
     def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
 
