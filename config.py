@@ -1,5 +1,5 @@
 #Setup of the machine
-length = 80.0 #Length of the plate
+length = 200.0 #Length of the plate
 front = 70.0 #Distance from the spot to the front
 X_offset = 22.0 #Distance from the left of the plate, to the center of the first spot
 Y_offset = 8.0 #Distance from the bottom of the plate, to the center of the spots
@@ -34,5 +34,3 @@ observation = 'visible'
 show = ['single_hptlc/sample_1.csv',
        'single_hptlc/sample_4.csv',
        'single_hptlc/sample_10.csv']
-
-
