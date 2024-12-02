@@ -42,6 +42,12 @@ python -c "import hptlc; hptlc.show_curve()"
 It will show all the HPTLC curves specified in the variable "show" from the `config.py` file.
 
 
-## Compare samples.
+## Compare samples
 
-One of the main advantage of having a standardize package to extract HPTLC curves is that we can perform data analysis. In `compare.py` we propose a metric to compute the similarity between any sample and the rest of the samples. 
+One of the main advantage of having a standardize package to extract HPTLC curves is that we can perform data analysis. In `compare.py` we propose a metric to compute the similarity between any sample and the rest of the samples. In practice, we compute a distance (in a high dimensional space) between the sample of interest and all the other samples. In order to compute this distance, simply fill the compute_distances variable inside `config.py` and run:
+
+```sh
+python -c "import compare; compare.main()"
+```
+
+Such method can, for example, be used as a way to indentify an unknown sample. 
