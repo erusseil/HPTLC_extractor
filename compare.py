@@ -43,20 +43,27 @@ def mesure_distances(main_folder_path, name):
             distances = []
             for columns in columns_to_compare:
                 other_data = other_object[columns[0]][columns[1]]
-                other_to_compare = np.array([other_data['R'],
-                                                other_data['G'],
-                                                other_data['B']])
-                
-                distances.append(compute_single_distance(main_to_compare[0], other_to_compare))
-            all_distances.append(np.mean(distances))
+                if other_data['R'] != []:
+                    other_to_compare = np.array([other_data['R'],
+                                                    other_data['G'],
+                                                    other_data['B']])
+                    
+                    distances.append(compute_single_distance(main_to_compare[0], other_to_compare))
 
-        ord_dist, ord_others = zip(*sorted(zip(all_distances, others)))
-        ord_others = [k[:-5] for k in ord_others if k[-5:]=='.json']
+            if distances != []:
+                all_distances.append(np.mean(distances))
+
+            else:
+                all_distances.append(np.nan)
+        
+        new_others = [k[:-5] for k in others if k[-5:]=='.json']
 
         if not os.path.isdir(main_folder_path + "distances"):
             os.makedirs(main_folder_path + "distances")
 
-        to_dump = pd.DataFrame(data={"Name":ord_others, "Distance":ord_dist})
+        to_dump = pd.DataFrame(data={"Name":new_others, "Distance":all_distances})
+        to_dump = to_dump.dropna(ignore_index=True)
+        to_dump = to_dump.sort_values("Distance")
         to_dump.to_csv(main_folder_path + 'distances/' + name + ".csv", index=False)
         
 
