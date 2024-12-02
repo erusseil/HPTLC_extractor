@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import imageio.v3 as iio
+import json
 
 
 class HPTLC_extracter():
@@ -34,11 +35,25 @@ class HPTLC_extracter():
         if not os.path.isdir(HPTLC_extracter.main_folder_path):
             os.makedirs(HPTLC_extracter.main_folder_path)
 
+        # Create an empty dict for new objects that have not been studied yet.
+        dico = {}
+        for elu in HPTLC_extracter.stardard_eluants:
+            sub_dico = {}
+            for obs in HPTLC_extracter.standard_observations:
+                sub_sub_dico = {}
+                for channel in ['R', 'G', 'B']:
+                    sub_sub_dico[channel] = []
+                sub_dico[obs] = sub_sub_dico
+            dico[elu] = sub_dico
+                
+        # Convert Python to JSON  
+        json_object = json.dumps(dico, indent = 2) 
+
         for name in self.names:
-            if not os.path.isdir(HPTLC_extracter.main_folder_path + name):
-                os.makedirs(HPTLC_extracter.main_folder_path + name)
-                for eluant in HPTLC_extracter.stardard_eluants:
-                    os.makedirs(HPTLC_extracter.main_folder_path + name + "/" + eluant)
+            path_name = f"{HPTLC_extracter.main_folder_path}/{name}.json"
+            if not os.path.isfile(path_name):
+                with open(path_name, "w") as outfile:
+                    outfile.write(json_object)
 
     @staticmethod
     def convert_image_to_array(path, length, X_offset, Y_offset, front, inter_spot_dist, names, save=False):
@@ -76,9 +91,22 @@ class HPTLC_extracter():
                                                  self.front, self.inter_spot_dist,
                                                  self.names)
 
+        
         for idx, sample in enumerate(all_sample):
-            save_path = f"{HPTLC_extracter.main_folder_path}/{self.names[idx]}/{self.eluant}/{self.observation}.csv"
-            np.savetxt(save_path, sample, delimiter=",")
+            save_path = f"{HPTLC_extracter.main_folder_path}{self.names[idx]}.json"
+
+            # Read previous already existing data
+            with open(save_path, 'r') as openfile:
+                json_object = json.load(openfile)
+
+            # Add or replace with the new info
+            for idx2, channel in enumerate(['R', 'G', 'B']):
+                json_object[self.eluant][self.observation][channel] = list(sample[:, idx2])
+
+            # Save again
+            json_dico = json.dumps(json_object, indent = 2) 
+            with open(save_path, "w") as outfile:
+                outfile.write(json_dico)
 
 
 def main():
