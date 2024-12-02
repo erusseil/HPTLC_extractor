@@ -22,7 +22,7 @@ names = ['sample_0',
  'sample_13']
 
 # Path to the image
-path = 'path/to/the/image.png'
+path = '../images/Data test p-anisaldehyde Visible.png'
 
 # Scientific variables
 # NB: This is only required for the production of the standardize database, i.e. using main()
@@ -34,3 +34,6 @@ observation = 'visible'
 show = ['single_hptlc/sample_1.csv',
        'single_hptlc/sample_4.csv',
        'single_hptlc/sample_10.csv']
+
+compute_distances = ["sample_2", "sample_3", 'sample_4','sample_5','sample_6']
+show_n_best = 5

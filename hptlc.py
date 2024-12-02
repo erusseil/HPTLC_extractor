@@ -128,7 +128,6 @@ def single():
                                            config.X_offset, config.Y_offset, 
                                            config.front, config.inter_spot_dist, 
                                            config.names, True)
-    
 
 def show_curve():
 
