@@ -10,7 +10,7 @@ import config
 def mesure_distances(main_folder_path, name):
 
     # Open sample of interest
-    with open(f"{main_folder_path}/{name}.json", 'r') as openfile:
+    with open(f"{main_folder_path}/standard/{name}.json", 'r') as openfile:
         main_object = json.load(openfile)
 
 
@@ -31,24 +31,24 @@ def mesure_distances(main_folder_path, name):
         print(f"{name}.json is empty. Nothing to compare with.")
 
     else:
-        others = [f for f in listdir(main_folder_path) if isfile(join(main_folder_path, f))]
+        others = [f for f in listdir(main_folder_path+"/standard/") if isfile(join(main_folder_path+"/standard/", f))]
         others.remove(name+".json")
 
         all_distances = []
         for other in others:
-            with open(f"{main_folder_path}/{other}", 'r') as openfile:
+            with open(f"{main_folder_path}/standard/{other}", 'r') as openfile:
                 other_object = json.load(openfile)
 
 
             distances = []
-            for columns in columns_to_compare:
+            for idx, columns in enumerate(columns_to_compare):
                 other_data = other_object[columns[0]][columns[1]]
                 if other_data['R'] != []:
                     other_to_compare = np.array([other_data['R'],
                                                     other_data['G'],
                                                     other_data['B']])
-                    
-                    distances.append(compute_single_distance(main_to_compare[0], other_to_compare))
+
+                    distances.append(compute_single_distance(main_to_compare[idx], other_to_compare))
 
             if distances != []:
                 all_distances.append(np.mean(distances))
@@ -68,11 +68,9 @@ def mesure_distances(main_folder_path, name):
         
 
 def compute_single_distance(data1, data2):
-    norm_data1 = data1 - data1.mean()
-    norm_data2 = data2 - data2.mean()
-    diff = abs(norm_data1 - norm_data2)
-    distance = np.sum(diff)/np.shape((norm_data1))[1]
-    return distance
+    diff = abs(data1 - data2)
+    distance = np.sum(diff)/np.shape(data1)[1]
+    return 100*distance
 
 def show_results(main_folder_path, name, n=5):
 
