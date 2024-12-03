@@ -10,14 +10,17 @@ class HPTLC_extracter():
     stardard_eluants = ['LPDS', 'MPDS', 'HPDS']
     standard_observations = ['254nm', '366nm', 'visible', 'developer']
     half_window = 25
+    resolution = 500
     extra = 50
+    baseline_lam = 1e7
+    peak_prominence = 3
 
     def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
 
-        if not eluant in HPTLC_extracter.stardard_eluants:
+        if not eluant in self.stardard_eluants:
             raise ValueError('Only LPDS, MPDS, or HPDS, are accepted as standard eluants.')
 
-        if not observation in HPTLC_extracter.standard_observations:
+        if not observation in self.standard_observations:
             raise ValueError('Only 254nm, 366nm, visible, or developer, are accepted as standard observation.')
 
         self.names = names
@@ -32,20 +35,20 @@ class HPTLC_extracter():
         
     def create_product_folder(self):
 
-        if not os.path.isdir(HPTLC_extracter.main_folder_path):
-            os.makedirs(HPTLC_extracter.main_folder_path)
+        if not os.path.isdir(self.main_folder_path):
+            os.makedirs(self.main_folder_path)
 
-        if not os.path.isdir(f"{HPTLC_extracter.main_folder_path}/raw/"):
-            os.makedirs(f"{HPTLC_extracter.main_folder_path}/raw/")
+        if not os.path.isdir(f"{self.main_folder_path}/raw/"):
+            os.makedirs(f"{self.main_folder_path}/raw/")
 
-        if not os.path.isdir(f"{HPTLC_extracter.main_folder_path}/standard/"):
-            os.makedirs(f"{HPTLC_extracter.main_folder_path}/standard/")
+        if not os.path.isdir(f"{self.main_folder_path}/standard/"):
+            os.makedirs(f"{self.main_folder_path}/standard/")
 
         # Create an empty dict for new objects that have not been studied yet.
         dico = {}
-        for elu in HPTLC_extracter.stardard_eluants:
+        for elu in self.stardard_eluants:
             sub_dico = {}
-            for obs in HPTLC_extracter.standard_observations:
+            for obs in self.standard_observations:
                 sub_sub_dico = {}
                 for channel in ['R', 'G', 'B']:
                     sub_sub_dico[channel] = []
@@ -57,7 +60,7 @@ class HPTLC_extracter():
 
         for name in self.names:
             for folder in ['raw', 'standard']:
-                path_name = f"{HPTLC_extracter.main_folder_path}/{folder}/{name}.json"
+                path_name = f"{self.main_folder_path}/{folder}/{name}.json"
                 if not os.path.isfile(path_name):
                     with open(path_name, "w") as outfile:
                         outfile.write(json_object)
@@ -100,7 +103,7 @@ class HPTLC_extracter():
 
         # For the raw data
         for idx, sample in enumerate(all_sample):
-            save_path = f"{HPTLC_extracter.main_folder_path}/raw/{self.names[idx]}.json"
+            save_path = f"{self.main_folder_path}/raw/{self.names[idx]}.json"
 
             # Read previous already existing data
             with open(save_path, 'r') as openfile:
@@ -119,7 +122,7 @@ class HPTLC_extracter():
         for idx, sample in enumerate(all_sample):
 
             norm_sample = self.normalize(sample)
-            save_path = f"{HPTLC_extracter.main_folder_path}/standard/{self.names[idx]}.json"
+            save_path = f"{self.main_folder_path}/standard/{self.names[idx]}.json"
 
             # Read previous already existing data
             with open(save_path, 'r') as openfile:
@@ -134,23 +137,23 @@ class HPTLC_extracter():
             with open(save_path, "w") as outfile:
                 outfile.write(json_dico)
 
-    @staticmethod
-    def normalize(sample):
+    def normalize(self, sample):
 
         from scipy.signal import find_peaks
         from pybaselines import Baseline
 
-        sign = HPTLC_extracter.peak_or_holes(sample)
+        sign = self.peak_or_holes(sample)
         all_peaks = []
         norm_sample = []
         
         for i in range(3):
+            sub = self.subsample(sample[:, i], self.resolution)
             baseline_fitter = Baseline()
-            bkg, _ = baseline_fitter.asls(sign * sample[:, i], lam=1e7)
-            new = sign * sample[:, i] - bkg
+            bkg, _ = baseline_fitter.asls(sign * sub, lam=self.baseline_lam)
+            new = sign * sub - bkg
             norm_sample.append(new)
         
-            arg_peaks = find_peaks(new, prominence=3)
+            arg_peaks = find_peaks(new, prominence=self.peak_prominence)
             all_peaks.append(new[arg_peaks[0]])
         
         flatten_peaks = [item for row in all_peaks for item in row]
@@ -165,6 +168,18 @@ class HPTLC_extracter():
 
         norm_sample = sign * np.array(norm_sample).T/norm_factor
         return norm_sample
+
+    @staticmethod
+    def subsample(sample, nbins):
+
+        # Calculate the bin indices for each element
+        bin_edges = np.linspace(0, len(sample), nbins + 1, endpoint=True)
+        bin_indices = np.floor(np.linspace(0, nbins, len(sample))).astype(int)
+        
+        # Aggregate values by bin using `np.bincount`
+        binned_array = np.bincount(bin_indices, weights=sample) / np.bincount(bin_indices)
+        
+        return binned_array
 
     @staticmethod
     def peak_or_holes(sample):
