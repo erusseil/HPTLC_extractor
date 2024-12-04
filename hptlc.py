@@ -12,7 +12,7 @@ class HPTLC_extracter():
     half_window = 25
     resolution = 500
     extra = 50
-    baseline_lam = 1e7
+    baseline_lam = 1e4
     peak_prominence = 3
 
     def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
@@ -121,7 +121,7 @@ class HPTLC_extracter():
         #Same for the normalized data
         for idx, sample in enumerate(all_sample):
 
-            norm_sample = self.normalize(sample)
+            norm_sample = self.normalize(sample, self.resolution, self.baseline_lam, self.peak_prominence)
             save_path = f"{self.main_folder_path}/standard/{self.names[idx]}.json"
 
             # Read previous already existing data
@@ -137,23 +137,26 @@ class HPTLC_extracter():
             with open(save_path, "w") as outfile:
                 outfile.write(json_dico)
 
-    def normalize(self, sample):
+    @staticmethod
+    def normalize(sample, resolution, baseline_lam, peak_prominence):
 
         from scipy.signal import find_peaks
         from pybaselines import Baseline
 
-        sign = self.peak_or_holes(sample)
+        sign = HPTLC_extracter.peak_or_holes(sample)
         all_peaks = []
         norm_sample = []
         
         for i in range(3):
-            sub = self.subsample(sample[:, i], self.resolution)
+            sub = HPTLC_extracter.subsample(sample[:, i], resolution)
+            norm_baseline = np.ptp(sub)
+
             baseline_fitter = Baseline()
-            bkg, _ = baseline_fitter.asls(sign * sub, lam=self.baseline_lam)
+            bkg, _ = baseline_fitter.derpsalsa(sign * sub, lam=baseline_lam/norm_baseline)
             new = sign * sub - bkg
             norm_sample.append(new)
         
-            arg_peaks = find_peaks(new, prominence=self.peak_prominence)
+            arg_peaks = find_peaks(new, prominence=peak_prominence)
             all_peaks.append(new[arg_peaks[0]])
         
         flatten_peaks = [item for row in all_peaks for item in row]
