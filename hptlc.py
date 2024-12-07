@@ -23,6 +23,8 @@ class HPTLC_extracter():
         if not observation in self.standard_observations:
             raise ValueError('Only 254nm, 366nm, visible, or developer, are accepted as standard observation.')
 
+        self.check_bckg_exists(names)
+
         self.names = names
         self.path = os.path.normpath(path)
         self.length = length
@@ -45,29 +47,51 @@ class HPTLC_extracter():
             os.makedirs(f"{self.main_folder_path}/standard/")
 
         # Create an empty dict for new objects that have not been studied yet.
+        # The standardize dict do not contain the original background used to normalize them.
         dico = {}
+        dico_std = {}
+
         for elu in self.stardard_eluants:
             sub_dico = {}
+            sub_dico_std = {}
             for obs in self.standard_observations:
                 sub_sub_dico = {}
+                sub_sub_dico_std = {}
                 for channel in ['R', 'G', 'B']:
                     sub_sub_dico[channel] = []
+                    sub_sub_dico_std[channel] = []
+
+                sub_sub_dico['background'] = {}
+                for channel in ['R', 'G', 'B']:
+                    sub_sub_dico['background'][channel] = []  
+
                 sub_dico[obs] = sub_sub_dico
+                sub_dico_std[obs] = sub_sub_dico_std
             dico[elu] = sub_dico
+            dico_std[elu] = sub_dico_std
                 
         # Convert Python to JSON  
-        json_object = json.dumps(dico, indent = 2) 
+        json_object = json.dumps(dico, indent = 2)
+        json_object_std = json.dumps(dico_std, indent = 2)
 
         for name in self.names:
-            for folder in ['raw', 'standard']:
-                path_name = f"{self.main_folder_path}/{folder}/{name}.json"
+            if not name == '':            
+                path_name = f"{self.main_folder_path}/raw/{name}.json"
                 if not os.path.isfile(path_name):
                     with open(path_name, "w") as outfile:
                         outfile.write(json_object)
 
+                path_name_std = f"{self.main_folder_path}/standard/{name}.json"
+                if not os.path.isfile(path_name_std):
+                    with open(path_name_std, "w") as outfile:
+                        outfile.write(json_object_std)
+
     @staticmethod
     def convert_image_to_array(path, length, X_offset, Y_offset, front, inter_spot_dist, names, save=False):
-        
+
+        HPTLC_extracter.check_bckg_exists(names)
+
+        bckg_arg = np.where(np.array(names) == '')[0][0]
         image = iio.imread(os.path.normpath(path))
         pixel_size = length/np.shape(image)[1]
         half_window = HPTLC_extracter.half_window
@@ -82,7 +106,9 @@ class HPTLC_extracter():
         
             rectangle = image[bottom:top:-1, center - half_window : center + half_window, :3]
             averaged = np.mean(rectangle, axis=1)
-            all_samples.append(averaged)
+
+            if n != bckg_arg:
+                all_samples.append(averaged)
 
             if save:
                 if not os.path.isdir('single_hptlc'):
@@ -103,39 +129,40 @@ class HPTLC_extracter():
 
         # For the raw data
         for idx, sample in enumerate(all_sample):
-            save_path = f"{self.main_folder_path}/raw/{self.names[idx]}.json"
-
-            # Read previous already existing data
-            with open(save_path, 'r') as openfile:
-                json_object = json.load(openfile)
-
-            # Add or replace with the new info
-            for idx2, channel in enumerate(['R', 'G', 'B']):
-                json_object[self.eluant][self.observation][channel] = list(sample[:, idx2])
-
-            # Save again
-            json_dico = json.dumps(json_object, indent = 2) 
-            with open(save_path, "w") as outfile:
-                outfile.write(json_dico)
+            if self.names[idx] != '':
+                save_path = f"{self.main_folder_path}/raw/{self.names[idx]}.json"
+    
+                # Read previous already existing data
+                with open(save_path, 'r') as openfile:
+                    json_object = json.load(openfile)
+    
+                # Add or replace with the new info
+                for idx2, channel in enumerate(['R', 'G', 'B']):
+                    json_object[self.eluant][self.observation][channel] = list(sample[:, idx2])
+    
+                # Save again
+                json_dico = json.dumps(json_object, indent = 2) 
+                with open(save_path, "w") as outfile:
+                    outfile.write(json_dico)
 
         #Same for the normalized data
         for idx, sample in enumerate(all_sample):
-
-            norm_sample = self.normalize(sample, self.resolution, self.baseline_lam, self.peak_prominence)
-            save_path = f"{self.main_folder_path}/standard/{self.names[idx]}.json"
-
-            # Read previous already existing data
-            with open(save_path, 'r') as openfile:
-                json_object = json.load(openfile)
-
-            # Add or replace with the new info
-            for idx2, channel in enumerate(['R', 'G', 'B']):
-                json_object[self.eluant][self.observation][channel] = list(norm_sample[:, idx2])
-
-            # Save again
-            json_dico = json.dumps(json_object, indent = 2) 
-            with open(save_path, "w") as outfile:
-                outfile.write(json_dico)
+            if self.names[idx] != '':
+                norm_sample = self.normalize(sample, self.resolution, self.baseline_lam, self.peak_prominence)
+                save_path = f"{self.main_folder_path}/standard/{self.names[idx]}.json"
+    
+                # Read previous already existing data
+                with open(save_path, 'r') as openfile:
+                    json_object = json.load(openfile)
+    
+                # Add or replace with the new info
+                for idx2, channel in enumerate(['R', 'G', 'B']):
+                    json_object[self.eluant][self.observation][channel] = list(norm_sample[:, idx2])
+    
+                # Save again
+                json_dico = json.dumps(json_object, indent = 2) 
+                with open(save_path, "w") as outfile:
+                    outfile.write(json_dico)
 
     @staticmethod
     def normalize(sample, resolution, baseline_lam, peak_prominence):
@@ -197,6 +224,11 @@ class HPTLC_extracter():
         else:
             return -1
 
+    @staticmethod
+    def check_bckg_exists(names):
+        if not "" in names:
+            message = "\n\n!!!ERROR!!!\nThe name list must contain one empty string that corresponds to the empty track. This empty track is necessary to calibrate the background profile.\n!!!ERROR!!!\n"
+            raise ValueError(message)
 
 def main():
 
