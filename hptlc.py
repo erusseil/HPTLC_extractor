@@ -87,7 +87,7 @@ class HPTLC_extracter():
                         outfile.write(json_object_std)
 
     @staticmethod
-    def convert_image_to_array(path, length, X_offset, Y_offset, front, inter_spot_dist, names, save=False):
+    def convert_image_to_array(path, length, X_offset, Y_offset, front, inter_spot_dist, names):
 
         HPTLC_extracter.check_bckg_exists(names)
 
@@ -110,19 +110,16 @@ class HPTLC_extracter():
             if n != bckg_arg:
                 all_samples.append(averaged)
 
-            if save:
-                if not os.path.isdir('single_hptlc'):
-                    os.makedirs('single_hptlc')
-                np.savetxt(f"single_hptlc/{names[n]}.csv", averaged, delimiter=",")
+            else:
+                bckg = averaged
 
-        if save==False:
-            return np.array(all_samples)
+        return np.array(all_samples), bckg
 
 
     def extract_samples(self):
 
         self.create_product_folder()
-        all_sample = self.convert_image_to_array(self.path, self.length,
+        all_sample, bckg = self.convert_image_to_array(self.path, self.length,
                                                  self.X_offset, self.Y_offset,
                                                  self.front, self.inter_spot_dist,
                                                  self.names)
@@ -139,6 +136,8 @@ class HPTLC_extracter():
                 # Add or replace with the new info
                 for idx2, channel in enumerate(['R', 'G', 'B']):
                     json_object[self.eluant][self.observation][channel] = list(sample[:, idx2])
+                    json_object[self.eluant][self.observation]['background'][channel] = list(bckg[:, idx2])
+                
     
                 # Save again
                 json_dico = json.dumps(json_object, indent = 2) 
