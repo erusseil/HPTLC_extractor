@@ -12,8 +12,6 @@ class HPTLC_extracter():
     half_window = 25
     resolution = 500
     extra = 50
-    baseline_lam = 1e4
-    peak_prominence = 3
 
     def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
 
@@ -147,7 +145,7 @@ class HPTLC_extracter():
         #Same for the normalized data
         for idx, sample in enumerate(all_sample):
             if self.names[idx] != '':
-                norm_sample = self.normalize(sample, self.resolution, self.baseline_lam, self.peak_prominence)
+                norm_sample = self.normalize(sample, bckg, self.resolution)
                 save_path = f"{self.main_folder_path}/standard/{self.names[idx]}.json"
     
                 # Read previous already existing data
@@ -162,66 +160,35 @@ class HPTLC_extracter():
                 json_dico = json.dumps(json_object, indent = 2) 
                 with open(save_path, "w") as outfile:
                     outfile.write(json_dico)
-
+   
     @staticmethod
-    def normalize(sample, resolution, baseline_lam, peak_prominence):
+    def normalize(sample, background, resolution):
 
         from scipy.signal import find_peaks
-        from pybaselines import Baseline
 
-        sign = HPTLC_extracter.peak_or_holes(sample)
-        all_peaks = []
         norm_sample = []
         
         for i in range(3):
-            sub = HPTLC_extracter.subsample(sample[:, i], resolution)
-            norm_baseline = np.ptp(sub)
-
-            baseline_fitter = Baseline()
-            bkg, _ = baseline_fitter.derpsalsa(sign * sub, lam=baseline_lam/norm_baseline)
-            new = sign * sub - bkg
+            sub = sample[:, i]
+            bkg = background[:, i]
+            new = HPTLC_extracter.subsample(sub - bkg, resolution)
             norm_sample.append(new)
-        
-            arg_peaks = find_peaks(new, prominence=peak_prominence)
-            all_peaks.append(new[arg_peaks[0]])
-        
-        flatten_peaks = [item for row in all_peaks for item in row]
-        
-        # We normalize for the absolute maximum peak to be equal to 1.
-        if len(flatten_peaks)>0:
-            norm_factor = max(flatten_peaks)
-        
-        # If no peak is detected, we don't normalize in order to not overfit the noise.
-        else:
-            norm_factor = 1
 
-        norm_sample = sign * np.array(norm_sample).T/norm_factor
+        norm_sample = np.array(norm_sample).T / np.max(np.abs(norm_sample))
+
         return norm_sample
 
     @staticmethod
     def subsample(sample, nbins):
 
         # Calculate the bin indices for each element
-        bin_edges = np.linspace(0, len(sample), nbins + 1, endpoint=True)
-        bin_indices = np.floor(np.linspace(0, nbins, len(sample))).astype(int)
-        
+        bin_edges = np.linspace(0, len(sample) + 1, nbins)
+        bin_indices = np.floor(np.linspace(0, nbins - 1, len(sample))).astype(int)
+
         # Aggregate values by bin using `np.bincount`
         binned_array = np.bincount(bin_indices, weights=sample) / np.bincount(bin_indices)
         
         return binned_array
-
-    @staticmethod
-    def peak_or_holes(sample):
-        shifted = sample - np.median(sample, axis=0)
-        summed = np.sum(shifted)
-    
-        # If most of the signal is above the median, it is peaks
-        if summed>0:
-            return 1
-    
-        # Else most of the data is below, it is holes
-        else:
-            return -1
 
     @staticmethod
     def check_bckg_exists(names):
