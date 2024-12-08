@@ -26,14 +26,6 @@ python -c "import hptlc; hptlc.main()"
 This will result in the creation of well structured storage files. However, it requires standard HPTLC procedures and does not allow anything else. 
 
 
-If you want a simple conversion, even outside of the standard procedure, you can simply run:
-```sh
-python -c "import hptlc; hptlc.single()"
-```
-
-In that case it will drop all the results in a single folder.
-
-
 If you want to visualize some csv files you can run:
 ```sh
 python -c "import hptlc; hptlc.show_curve()"

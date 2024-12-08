@@ -240,15 +240,6 @@ def main():
 
     hptlc.extract_samples()
 
-def single():
-
-    import config
-
-    HPTLC_extracter.convert_image_to_array(config.path, config.length, 
-                                           config.X_offset, config.Y_offset, 
-                                           config.front, config.inter_spot_dist, 
-                                           config.names, True)
-
 def show_curve():
 
     import config
