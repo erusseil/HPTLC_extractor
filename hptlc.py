@@ -123,9 +123,12 @@ class HPTLC_extracter():
                                                  self.names)
 
         # For the raw data
-        for idx, sample in enumerate(all_sample):
-            if self.names[idx] != '':
-                save_path = f"{self.main_folder_path}/raw/{self.names[idx]}.json"
+        idx = 0
+        for k in range(len(self.names)):
+            if self.names[k] != '':
+                sample = all_sample[idx]
+                save_path = f"{self.main_folder_path}/raw/{self.names[k]}.json"
+                idx += 1
     
                 # Read previous already existing data
                 with open(save_path, 'r') as openfile:
@@ -143,11 +146,14 @@ class HPTLC_extracter():
                     outfile.write(json_dico)
 
         #Same for the normalized data
-        for idx, sample in enumerate(all_sample):
-            if self.names[idx] != '':
+        idx = 0
+        for k in range(len(self.names)):
+            if self.names[k] != '':
+                sample = all_sample[idx]
                 norm_sample = self.normalize(sample, bckg, self.resolution)
-                save_path = f"{self.main_folder_path}/standard/{self.names[idx]}.json"
-    
+                save_path = f"{self.main_folder_path}/standard/{self.names[k]}.json"
+                idx += 1
+
                 # Read previous already existing data
                 with open(save_path, 'r') as openfile:
                     json_object = json.load(openfile)
