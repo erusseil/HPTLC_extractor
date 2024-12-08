@@ -26,7 +26,7 @@ python -c "import hptlc; hptlc.main()"
 This will result in the creation of well structured storage files. However, it requires standard HPTLC procedures and does not allow anything else. 
 
 
-If you want to visualize some csv files you can run:
+If you want to visualize some json files you can run:
 ```sh
 python -c "import hptlc; hptlc.show_curve()"
 ```
