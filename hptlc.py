@@ -220,13 +220,15 @@ def show_curve():
         
         colors = ['r', 'g', 'b']
         RGB = ['R', 'G', 'B']
-
+        
+        plt.figure()
         for i in range(3):
             curve = json_object[config.eluant][config.observation][RGB[i]]
             plt.plot(curve, color=colors[i])
 
         plt.title(path)
-        plt.show()
+    
+    plt.show()
 
     
     
