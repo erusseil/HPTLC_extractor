@@ -11,7 +11,7 @@ class HPTLC_extracter():
     standard_observations = ['254nm', '366nm', 'visible', 'developer']
     half_window = 25
     resolution = 500
-    extra = 50
+    extra = 0.03 #Extra length to add top and bottom in percent of the migration length
 
     def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
 
@@ -93,14 +93,14 @@ class HPTLC_extracter():
         image = iio.imread(os.path.normpath(path))
         pixel_size = length/np.shape(image)[1]
         half_window = HPTLC_extracter.half_window
-        extra = HPTLC_extracter.extra
+        extra = int(HPTLC_extracter.extra * front/pixel_size)
         space = inter_spot_dist/pixel_size
 
         all_samples = []
         for n in range(len(names)):
             center = int(X_offset/pixel_size + n * inter_spot_dist/pixel_size)
-            bottom = int(np.shape(image)[0] - Y_offset/pixel_size + extra)
-            top = int(bottom - front/pixel_size - extra)
+            bottom = min(np.shape(image)[0], int(np.shape(image)[0] - Y_offset/pixel_size + extra))
+            top = max(0, int(bottom - front/pixel_size - 2 * extra))
         
             rectangle = image[bottom:top:-1, center - half_window : center + half_window, :3]
             averaged = np.mean(rectangle, axis=1)
