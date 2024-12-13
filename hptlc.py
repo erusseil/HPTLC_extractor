@@ -12,6 +12,7 @@ class HPTLC_extracter():
     half_window = 25
     resolution = 500
     extra = 0.03 #Extra length to add top and bottom in percent of the migration length
+    lam = 1e7 #Value used in the baseline fit
 
     def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
 
@@ -150,7 +151,7 @@ class HPTLC_extracter():
         for k in range(len(self.names)):
             if self.names[k] != '':
                 sample = all_sample[idx]
-                norm_sample = self.normalize(sample, bckg, self.resolution)
+                norm_sample = self.normalize(sample, bckg, self.resolution, self.lam)
                 save_path = f"{self.main_folder_path}/standard/{self.names[k]}.json"
                 idx += 1
 
@@ -168,17 +169,15 @@ class HPTLC_extracter():
                     outfile.write(json_dico)
    
     @staticmethod
-    def normalize(sample, background, resolution):
-
-        from scipy.signal import find_peaks
+    def normalize(sample, background, resolution, lam):
 
         norm_sample = []
-        
         for i in range(3):
             sub = sample[:, i]
             bkg = background[:, i]
-            new = HPTLC_extracter.subsample(sub - bkg, resolution)
-            norm_sample.append(new)
+            background_corrected = HPTLC_extracter.subsample(sub - bkg, resolution)
+            baseline_fit = HPTLC_extracter.fit_baseline(background_corrected, lam)
+            norm_sample.append(background_corrected - baseline_fit)
 
         norm_sample = np.array(norm_sample).T / np.max(np.abs(norm_sample))
 
@@ -201,6 +200,19 @@ class HPTLC_extracter():
         if not "" in names:
             message = "\n\n!!!ERROR!!!\nThe name list must contain one empty string that corresponds to the empty track. This empty track is necessary to calibrate the background profile.\n!!!ERROR!!!\n"
             raise ValueError(message)
+
+    @staticmethod
+    def fit_baseline(sample, baseline_lam):
+
+        from pybaselines import Baseline
+
+        baseline_fitter = Baseline()
+        baseline, _ = baseline_fitter.fabc(sample, lam=baseline_lam)
+
+        #Shift for median to be at zero
+        median = np.median(sample - baseline)
+        return baseline - median
+
 
 def main():
 
