@@ -2,25 +2,20 @@ import os
 import numpy as np
 import imageio.v3 as iio
 import json
-
+from os import listdir
+from os.path import isfile, join
 
 class HPTLC_extracter():
 
     main_folder_path = 'HPTLC_data/'
-    stardard_eluants = ['LPDS', 'MPDS', 'HPDS']
+    standard_eluants = ['LPDS', 'MPDS', 'HPDS']
     standard_observations = ['254nm', '366nm', 'visible', 'developer']
     half_window = 25
     resolution = 500
     extra = 0.03 #Extra length to add top and bottom in percent of the migration length
     lam = 1e7 #Value used in the baseline fit
 
-    def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
-
-        if not eluant in self.stardard_eluants:
-            raise ValueError('Only LPDS, MPDS, or HPDS, are accepted as standard eluants.')
-
-        if not observation in self.standard_observations:
-            raise ValueError('Only 254nm, 366nm, visible, or developer, are accepted as standard observation.')
+    def __init__(self, path, names, length, front, X_offset, Y_offset, inter_spot_dist):
 
         self.check_bckg_exists(names)
 
@@ -31,8 +26,6 @@ class HPTLC_extracter():
         self.X_offset = X_offset
         self.Y_offset = Y_offset
         self.inter_spot_dist = inter_spot_dist
-        self.eluant = eluant
-        self.observation = observation
         
     def create_product_folder(self):
 
@@ -50,7 +43,7 @@ class HPTLC_extracter():
         dico = {}
         dico_std = {}
 
-        for elu in self.stardard_eluants:
+        for elu in self.standard_eluants:
             sub_dico = {}
             sub_dico_std = {}
             for obs in self.standard_observations:
@@ -115,10 +108,11 @@ class HPTLC_extracter():
         return np.array(all_samples), bckg
 
 
-    def extract_samples(self):
+    def extract_one_image(self, image_path, eluant, observation):
 
         self.create_product_folder()
-        all_sample, bckg = self.convert_image_to_array(self.path, self.length,
+
+        all_sample, bckg = self.convert_image_to_array(image_path, self.length,
                                                  self.X_offset, self.Y_offset,
                                                  self.front, self.inter_spot_dist,
                                                  self.names)
@@ -137,8 +131,8 @@ class HPTLC_extracter():
     
                 # Add or replace with the new info
                 for idx2, channel in enumerate(['R', 'G', 'B']):
-                    json_object[self.eluant][self.observation][channel] = list(sample[:, idx2])
-                    json_object[self.eluant][self.observation]['background'][channel] = list(bckg[:, idx2])
+                    json_object[eluant][observation][channel] = list(sample[:, idx2])
+                    json_object[eluant][observation]['background'][channel] = list(bckg[:, idx2])
                 
     
                 # Save again
@@ -161,13 +155,27 @@ class HPTLC_extracter():
     
                 # Add or replace with the new info
                 for idx2, channel in enumerate(['R', 'G', 'B']):
-                    json_object[self.eluant][self.observation][channel] = list(norm_sample[:, idx2])
+                    json_object[eluant][observation][channel] = list(norm_sample[:, idx2])
     
                 # Save again
                 json_dico = json.dumps(json_object, indent = 2) 
                 with open(save_path, "w") as outfile:
                     outfile.write(json_dico)
-   
+
+    def extract_all_images(self):
+
+        all_files = [f for f in listdir(self.path) if isfile(join(self.path, f))]
+        all_names = [f[:f.find('.')] for f in all_files]
+
+        for eluant in HPTLC_extracter.standard_eluants:
+            for observation in HPTLC_extracter.standard_observations:
+                check = f'{eluant}_{observation}'
+                if check in all_names:
+                    image_path = f'{self.path}/{all_files[all_names.index(check)]}'
+                    self.extract_one_image(image_path, eluant, observation)
+                    print(f'{check} extracted !')
+
+
     @staticmethod
     def normalize(sample, background, resolution, lam):
 
@@ -220,10 +228,9 @@ def main():
     
     hptlc = HPTLC_extracter(config.path, config.names,
                             config.length, config.front, config.X_offset,
-                            config.Y_offset, config.inter_spot_dist,
-                            config.eluant, config.observation)
+                            config.Y_offset, config.inter_spot_dist)
 
-    hptlc.extract_samples()
+    hptlc.extract_all_images()
 
 def show_curve():
 

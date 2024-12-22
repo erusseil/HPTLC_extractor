@@ -24,19 +24,17 @@ names = ['sample_0',
  'sample_13',
  'sample_14']
 
-# Path to the image (must leave the r before the string if using Windows path)
-path = r'C:\Users\Haris\Desktop\HPTLC_extractor\Images\LPDS_visible.png'
+# Path to the experiment folder (must leave the r before the string if using Windows path)
+# Must contain images of the form: eluant_observation.png (for example MDPS_254nm.png)
+path = r"C:\Users\Haris\Desktop\HPTLC_extractor\Images"
 
-# Scientific variables
-# Eluant to choose among: ['LPDS', 'MPDS', 'HPDS']
-eluant = 'LPDS'
 
-# Observing setup to choose among: ['254nm', '366nm', 'visible', 'developer']
-observation = 'visible'
-
-# Curve visualization, i.e. using show_curve()
+# Curve visualization, i.e. using show_curve().
+# Indicate eluant and observation that you want to look at
 #NB: A list of files can be input for multiple visualization at once
-show = []
+eluant = 'LPDS'
+observation = '366nm'
+show = [r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\standard\sample_1.json"]
 
 compute_distances = ["sample_2", "sample_3"]
 show_n_best = 5
