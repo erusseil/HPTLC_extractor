@@ -16,9 +16,11 @@ def mesure_distances(main_folder_path, name):
 
     columns_to_compare = []
     main_to_compare = []
-
+    all_col_names = []
+    
     for elu in main_object:
         for obs in main_object[elu]:
+            all_col_names.append(f'{elu}_{obs}')
             if main_object[elu][obs]['R'] != []:
                 columns_to_compare.append((elu, obs))
 
@@ -41,36 +43,49 @@ def mesure_distances(main_folder_path, name):
 
 
             distances = []
-            for idx, columns in enumerate(columns_to_compare):
-                other_data = other_object[columns[0]][columns[1]]
-                if other_data['R'] != []:
-                    other_to_compare = np.array([other_data['R'],
-                                                    other_data['G'],
-                                                    other_data['B']])
+            idx = 0
+            for elu in main_object:
+                for obs in main_object[elu]:
+                    other_data = other_object[elu][obs]
+                    if other_data['R'] != []:
+                        other_to_compare = np.array([other_data['R'],
+                                                        other_data['G'],
+                                                        other_data['B']])
+                        distances.append(compute_single_distance(main_to_compare[idx], other_to_compare))
 
-                    distances.append(compute_single_distance(main_to_compare[idx], other_to_compare))
+                    else:
+                        distances.append(np.nan)
 
-            if distances != []:
-                all_distances.append(np.mean(distances))
+                    idx += 1
 
-            else:
-                all_distances.append(np.nan)
-        
+            all_distances.append([np.nanmean(distances)] + distances)
+
         new_others = [k[:-5] for k in others if k[-5:]=='.json']
 
         if not os.path.isdir(main_folder_path + "distances"):
             os.makedirs(main_folder_path + "distances")
 
-        to_dump = pd.DataFrame(data={"Name":new_others, "Distance":all_distances})
+        to_dump = pd.DataFrame(data={"Name":new_others, "Mean distance":np.array(all_distances)[:, 0]})
+
+        idx = 1
+        for idx, col_name in enumerate(all_col_names):
+            to_dump[col_name] = np.array(all_distances)[:, idx]
+
+        # Create a mean normalized so that each column weighs the same
+        col_means = np.nanmean(to_dump.iloc[:, 2:], axis=0)
+        norm_mean = np.nanmean(to_dump.iloc[:, 2:] / col_means, axis=1)
+        
+        to_dump['Normalized mean distance'] = norm_mean
         to_dump = to_dump.dropna(ignore_index=True)
-        to_dump = to_dump.sort_values("Distance")
+        to_dump = to_dump.sort_values("Normalized mean distance")
+        to_dump = to_dump[['Name', "Normalized mean distance", "Mean distance"] + all_col_names]
         to_dump.to_csv(main_folder_path + 'distances/' + name + ".csv", index=False)
         
 
 def compute_single_distance(data1, data2):
     diff = abs(data1 - data2)
     distance = np.sum(diff)/np.shape(data1)[1]
-    return 100*distance
+    return 100 * distance
 
 def show_results(main_folder_path, name, n=5):
 
@@ -80,11 +95,11 @@ def show_results(main_folder_path, name, n=5):
 
     df = pd.read_csv(f"{main_folder_path}/distances/{name}.csv")
 
-    ord_dist, ord_others = df['Distance'], df['Name']
+    ord_dist, ord_others = df['Normalized mean distance'], df['Name']
 
     print(f"\nSamples most similar to {name}:\n")
     for i in range(min(n, len(ord_others))):
-        print(f"{ord_others[i]} : {ord_dist[i]:.1f}")
+        print(f"{ord_others[i]} : {ord_dist[i]:.2f}")
 
     print('___________________\n')
 
