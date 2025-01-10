@@ -51,6 +51,9 @@ def mesure_distances(main_folder_path, name):
     if not os.path.isdir(main_folder_path + "/distances"):
         os.makedirs(main_folder_path + "/distances")
 
+    if not os.path.isdir(main_folder_path + "/distances/analysis/"):
+        os.makedirs(main_folder_path + "/distances/analysis/")
+
     to_dump = pd.DataFrame(data={"Name":new_others})
 
     for idx, col_name in enumerate(all_col_names):
@@ -118,7 +121,7 @@ def compute_summary_matrix(main_folder_path):
     
     # Convert the dictionary to a DataFrame
     distance_df = pd.DataFrame(distance_matrix)
-    distance_df.to_csv(main_folder_path + '/distances/summary_matrix.csv')
+    distance_df.to_csv(main_folder_path + '/distances/analysis/summary_matrix.csv')
 
 
 def show_results(main_folder_path, name, n=5):
@@ -137,9 +140,11 @@ def show_results(main_folder_path, name, n=5):
 
     print('___________________\n')
 
-def compute_all_distances(main_folder_path):
+def compute_all_distances():
 
+    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
     path = main_folder_path + '/standard/'
+    
     all_files = [f for f in listdir(path) if isfile(join(path, f))]
     for name in all_files:
             mesure_distances(main_folder_path, name)
