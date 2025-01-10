@@ -1,5 +1,6 @@
 import json
 import numpy as np
+import networkx as nx
 from os import listdir
 from os.path import isfile, join
 import pandas as pd
@@ -140,7 +141,7 @@ def show_results(main_folder_path, name, n=5):
 
     print('___________________\n')
 
-def compute_all_distances():
+def compute_all_distances(thresh = 0.05):
 
     main_folder_path = hptlc.HPTLC_extracter.main_folder_path
     path = main_folder_path + '/standard/'
@@ -150,7 +151,57 @@ def compute_all_distances():
             mesure_distances(main_folder_path, name)
 
     compute_summary_matrix(main_folder_path)
+    produce_full_graph(main_folder_path, thresh)
+
+def produce_full_graph(main_folder_path, thresh):
+
+    matrix = pd.read_csv(main_folder_path + 'distances/analysis/summary_matrix.csv')
+    m = np.array(matrix)[:, 1:]
+    m_contiunous = m.copy().astype(float)
+
+    link, nolink = (m<=thresh) & (m!=0), (m>thresh) | (m==thresh)
+    m[nolink] = 0
+    m[link] = 1
+    m = m.astype(int)
+
+    G = nx.from_numpy_array(m)
     
+    edge_weights = []
+    # Iterate over the nodes and add weights from the distance matrix
+    for i in list(G.nodes):
+        for j in list(G[i]):
+            if m[i, j] != 0:  # If there is an edge (non-zero in adjacency matrix)
+                edge_weights.append(1/(m_contiunous[i, j]))  # Assign distance as edge weight
+    
+    # Normalize edge weights to have a reasonable width scale (e.g., between 1 and 10)
+    min_weight = min(edge_weights)
+    max_weight = max(edge_weights)
+    scaled_weights = [0.2 + 5 * (weight - min_weight) / (max_weight - min_weight) for weight in edge_weights]
+
+    plot_distance_graph(G, dict(matrix['Unnamed: 0']), scaled_weights, main_folder_path + 'distances/analysis/summary_graph.png')
+
+
+def plot_distance_graph(G, labels, scaled_weights, save_path):
+
+    import matplotlib.pyplot as plt 
+
+    pos = nx.forceatlas2_layout(G, seed=42, strong_gravity=True)  # positions for all nodes
+    
+    plt.figure(figsize=(10,10))
+    nx.draw(G, pos=pos)
+    
+    # nodes
+    options = {"edgecolors": "tab:gray", "node_size": 1200, "alpha": 0.9}
+    nx.draw_networkx_nodes(G, pos, **options)
+    
+    # edges
+    nx.draw_networkx_edges(G, pos, width=scaled_weights, alpha=0.8)
+    nx.draw_networkx_labels(G, pos, labels, font_size=16, font_color="whitesmoke")
+    
+    plt.axis("off")
+    plt.savefig(save_path)
+    plt.show()
+
 def main():
     
     main_folder_path = hptlc.HPTLC_extracter.main_folder_path
