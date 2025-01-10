@@ -1,32 +1,33 @@
 #Setup of the machine
 length = 200.0 #Length of the plate
 front = 70.0 #Distance from the spot to the front
-X_offset = 20.9 #Distance from the left of the plate, to the center of the first spot
+X_offset = 17.5 #Distance from the left of the plate, to the center of the first spot
 Y_offset = 8.0 #Distance from the bottom of the plate, to the center of the spots
-inter_spot_dist = 11.3 #Distance between two spot centers
+inter_spot_dist = 11 #Distance between two spot centers
 
 # Names of the products. They should be in the same order as deposited on the plate. One of them MUST be an empty string.
 # It indicates the place of the empty track that will be used to remove the background.
 
-names = ['sample_0',
- 'sample_1',
- 'sample_2',
- 'sample_3',
- 'sample_4',
- 'sample_5',
- 'sample_6',
+names = ['c0',
+ 'c1',
+ 'c2',
+ 'c3',
+ 'c4',
+ 'c5',
+ 'c6',
+ 'c7',
  '',
- 'sample_8',
- 'sample_9',
- 'sample_10',
- 'sample_11',
- 'sample_12',
- 'sample_13',
- 'sample_14']
+ 'c9',
+ 'c10',
+ 'c11',
+ 'c12',
+ 'c13',
+ 'c14',
+ 'c15']
 
 # Path to the experiment folder (must leave the r before the string if using Windows path)
 # Must contain images of the form: eluant_observation.png (for example MDPS_254nm.png)
-path = r"C:\Users\Haris\Desktop\HPTLC_extractor\Images"
+path = r"C:\Users\Haris\Desktop\HPTLC_extractor\controled_images"
 
 
 # Curve visualization, i.e. using show_curve().
@@ -34,7 +35,13 @@ path = r"C:\Users\Haris\Desktop\HPTLC_extractor\Images"
 #NB: A list of files can be input for multiple visualization at once
 eluant = 'LPDS'
 observation = '366nm'
-show = [r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\standard\sample_1.json"]
+show = [r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\standard\c7.json",
+        r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\raw\c7.json",
+        r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\standard\c0.json",
+        r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\raw\c0.json"]
 
-compute_distances = ["sample_2", "sample_3"]
+compute_distances = ["c0", "c7"]
 show_n_best = 5
+
+
+threshold_graph = 0.05

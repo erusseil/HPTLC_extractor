@@ -97,34 +97,6 @@ def compute_single_distance_dtw(data1, data2):
     return np.round(np.mean(ds), 6)
 
 
-def compute_summary_matrix(main_folder_path):
-
-    path = main_folder_path + '/distances/'
-    all_files = [f for f in listdir(path) if isfile(join(path, f))]
-    
-    dfs = []
-    for file in all_files:
-        dfs.append(pd.read_csv(path + file))
-        
-    sample_names = [k[:-4] for k in all_files]
-    
-    # Create an empty dictionary to hold the final distance matrix
-    distance_matrix = {name: {name: 0 for name in sample_names} for name in sample_names}
-    
-    # Iterate over each dataframe and populate the distance matrix
-    for idx, df in enumerate(dfs):
-        sample_name = sample_names[idx]
-        for _, row in df.iterrows():
-            other_sample = row['Name']
-            distance = row['Normalized distance']
-            distance_matrix[sample_name][other_sample] = distance
-            distance_matrix[other_sample][sample_name] = distance  # for symmetry
-    
-    # Convert the dictionary to a DataFrame
-    distance_df = pd.DataFrame(distance_matrix)
-    distance_df.to_csv(main_folder_path + '/distances/analysis/summary_matrix.csv')
-
-
 def show_results(main_folder_path, name, n=5):
 
     #In case the user inputs a file
@@ -141,17 +113,6 @@ def show_results(main_folder_path, name, n=5):
 
     print('___________________\n')
 
-def compute_all_distances(thresh = 0.05):
-
-    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
-    path = main_folder_path + '/standard/'
-    
-    all_files = [f for f in listdir(path) if isfile(join(path, f))]
-    for name in all_files:
-            mesure_distances(main_folder_path, name)
-
-    compute_summary_matrix(main_folder_path)
-    produce_full_graph(main_folder_path, thresh)
 
 def produce_full_graph(main_folder_path, thresh):
 
@@ -202,6 +163,47 @@ def plot_distance_graph(G, labels, scaled_weights, save_path):
     plt.savefig(save_path)
     plt.show()
 
+def compute_all_distances():
+
+    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
+    path = main_folder_path + '/standard/'
+    
+    all_files = [f for f in listdir(path) if isfile(join(path, f))]
+    for name in all_files:
+            mesure_distances(main_folder_path, name)
+
+def matrix_and_graph():
+
+    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
+    path = main_folder_path + '/distances/'
+    all_files = [f for f in listdir(path) if isfile(join(path, f))]
+    
+    dfs = []
+    for file in all_files:
+        dfs.append(pd.read_csv(path + file))
+        
+    sample_names = [k[:-4] for k in all_files]
+    
+    # Create an empty dictionary to hold the final distance matrix
+    distance_matrix = {name: {name: 0 for name in sample_names} for name in sample_names}
+    
+    # Iterate over each dataframe and populate the distance matrix
+    for idx, df in enumerate(dfs):
+        sample_name = sample_names[idx]
+        for _, row in df.iterrows():
+            other_sample = row['Name']
+            distance = row['Normalized distance']
+            distance_matrix[sample_name][other_sample] = distance
+            distance_matrix[other_sample][sample_name] = distance  # for symmetry
+    
+    # Convert the dictionary to a DataFrame
+    distance_df = pd.DataFrame(distance_matrix)
+    distance_df.to_csv(main_folder_path + '/distances/analysis/summary_matrix.csv')
+
+    thresh = config.threshold_graph
+    produce_full_graph(main_folder_path, thresh)
+
+    
 def main():
     
     main_folder_path = hptlc.HPTLC_extracter.main_folder_path
