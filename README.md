@@ -48,4 +48,9 @@ If you want to automatically compute all distances of all samples, you can run:
 python -c "import compare; compare.compute_all_distances()"
 ```
 
-In addition to creating individual distance files, it will also create a big csv matrix that summarizes every normalized distances. Finally it will also produce a graph to visually represent your database. In this graph, only the most similar samples are connected to each other. In addition, the thickness of the lines scales with the similarity of the samples. Keep in mind that the length of the lines carry no meaning !! Two nodes close to each other in the plot does not imply that they are similar. 
+Finally, once *all distances* have been computed, you can produce interesting outputs. By running:
+
+```sh
+python -c "import compare; compare.matrix_and_graph()"
+```
+You will create a big `distances/analysis/summary_matrix.csv` `distances/analysis/summary_graph.png`. The first file summarizes the normalized distances of every sample to every other samples in a single matrix. The second one is a graph that visually represents your database. In this graph, only the most similar samples are connected to each other. The connection is done based on threshold value that can be changed in the `config.py` file. In addition, the thickness of the lines scales with the similarity of the samples. Keep in mind that the length of the lines carry no meaning !! Two nodes close to each other in the plot does not imply that they are similar. 
