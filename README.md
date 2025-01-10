@@ -1,6 +1,6 @@
 # HPTLC Extractor
 
-This small python package has been made to enable the conversion from HTPLC image to json files, with the aim of creating standardize databases.
+This small python package has been made to enable the conversion from HTPLC image to json files, with the aim of creating standardize databases and studying relationships within.
 
 ## Installation
 
@@ -36,10 +36,16 @@ It will show all the HPTLC curves specified in the variable "show" from the `con
 
 ## Compare samples
 
-One of the main advantage of having a standardize package to extract HPTLC curves is that we can perform data analysis. In `compare.py` we propose a metric to compute the similarity between any sample and the rest of the samples. In practice, we compute a distance (in a high dimensional space) between the sample of interest and all the other samples. In order to compute this distance, simply fill the compute_distances variable inside `config.py` and run:
+One of the main advantage of having a standardize package to extract HPTLC curves is that we can perform data analysis. In `compare.py` we propose a metric to compute the similarity between any sample and the rest of the samples. In practice, we compute a distance that reprensents the similarity between normalized sample spectra . In order to compute the distance of a single sample to all others, simply fill the compute_distances variable inside `config.py` and run:
 
 ```sh
 python -c "import compare; compare.main()"
 ```
 
-Such method can, for example, be used as a way to indentify an unknown sample. 
+If you want to automatically compute all distances of all samples, you can run:
+
+```sh
+python -c "import compare; compare.compute_all_distances()"
+```
+
+In addition to creating individual distance files, it will also create a big csv matrix that summarizes every normalized distances. Finally it will also produce a graph to visually represent your database. In this graph, only the most similar samples are connected to each other. In addition, the thickness of the lines scales with the similarity of the samples. Keep in mind that the length of the lines carry no meaning !! Two nodes close to each other in the plot does not imply that they are similar. 
