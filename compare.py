@@ -131,13 +131,13 @@ def produce_full_graph(main_folder_path, thresh):
     # Iterate over the nodes and add weights from the distance matrix
     for i in list(G.nodes):
         for j in list(G[i]):
-            if m[i, j] != 0:  # If there is an edge (non-zero in adjacency matrix)
+            if (m[i, j] != 0) & (i<j):  # Look only if there is an egde on all of the matrix (because it is symmetrical)
                 edge_weights.append(1/(m_contiunous[i, j]))  # Assign distance as edge weight
     
-    # Normalize edge weights to have a reasonable width scale (e.g., between 1 and 10)
+    # The scaling is temporary and a better one should be chosen once more data is available
     min_weight = min(edge_weights)
     max_weight = max(edge_weights)
-    scaled_weights = [0.2 + 5 * (weight - min_weight) / (max_weight - min_weight) for weight in edge_weights]
+    scaled_weights = [0.5 + 5 * (weight - min_weight) / (max_weight - min_weight) for weight in edge_weights]
 
     plot_distance_graph(G, dict(matrix['Unnamed: 0']), scaled_weights, main_folder_path + 'distances/analysis/summary_graph.png')
 
@@ -156,7 +156,7 @@ def plot_distance_graph(G, labels, scaled_weights, save_path):
     nx.draw_networkx_nodes(G, pos, **options)
     
     # edges
-    nx.draw_networkx_edges(G, pos, width=scaled_weights, alpha=0.8)
+    nx.draw_networkx_edges(G, pos, width=scaled_weights, alpha=1)
     nx.draw_networkx_labels(G, pos, labels, font_size=16, font_color="whitesmoke")
     
     plt.axis("off")
