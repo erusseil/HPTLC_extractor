@@ -26,7 +26,7 @@ class HPTLC_extracter():
         self.X_offset = X_offset
         self.Y_offset = Y_offset
         self.inter_spot_dist = inter_spot_dist
-        
+
     def create_product_folder(self):
 
         if not os.path.isdir(self.main_folder_path):
@@ -55,19 +55,19 @@ class HPTLC_extracter():
 
                 sub_sub_dico['background'] = {}
                 for channel in ['R', 'G', 'B']:
-                    sub_sub_dico['background'][channel] = []  
+                    sub_sub_dico['background'][channel] = []
 
                 sub_dico[obs] = sub_sub_dico
                 sub_dico_std[obs] = sub_sub_dico_std
             dico[elu] = sub_dico
             dico_std[elu] = sub_dico_std
-                
-        # Convert Python to JSON  
+
+        # Convert Python to JSON
         json_object = json.dumps(dico, indent = 2)
         json_object_std = json.dumps(dico_std, indent = 2)
 
         for name in self.names:
-            if not name == '':            
+            if not name == '':
                 path_name = f"{self.main_folder_path}/raw/{name}.json"
                 if not os.path.isfile(path_name):
                     with open(path_name, "w") as outfile:
@@ -95,7 +95,16 @@ class HPTLC_extracter():
             center = int(X_offset/pixel_size + n * inter_spot_dist/pixel_size)
             bottom = min(np.shape(image)[0], int(np.shape(image)[0] - Y_offset/pixel_size + extra))
             top = max(0, int(bottom - front/pixel_size - 2 * extra))
-        
+
+
+            if (top > np.shape(image)[0]) | (bottom < 0):
+                message = "The inputed height dimensions must be wrong"
+                raise ValueError(message)
+
+            if ((center + half_window) > np.shape(image)[1]) | (center < 0):
+                message = "The inputed width dimensions must be wrong"
+                raise ValueError(message)
+
             rectangle = image[bottom:top:-1, center - half_window : center + half_window, :3]
             averaged = np.mean(rectangle, axis=1)
 
@@ -124,19 +133,19 @@ class HPTLC_extracter():
                 sample = all_sample[idx]
                 save_path = f"{self.main_folder_path}/raw/{self.names[k]}.json"
                 idx += 1
-    
+
                 # Read previous already existing data
                 with open(save_path, 'r') as openfile:
                     json_object = json.load(openfile)
-    
+
                 # Add or replace with the new info
                 for idx2, channel in enumerate(['R', 'G', 'B']):
                     json_object[eluant][observation][channel] = list(sample[:, idx2])
                     json_object[eluant][observation]['background'][channel] = list(bckg[:, idx2])
-                
-    
+
+
                 # Save again
-                json_dico = json.dumps(json_object, indent = 2) 
+                json_dico = json.dumps(json_object, indent = 2)
                 with open(save_path, "w") as outfile:
                     outfile.write(json_dico)
 
@@ -152,13 +161,13 @@ class HPTLC_extracter():
                 # Read previous already existing data
                 with open(save_path, 'r') as openfile:
                     json_object = json.load(openfile)
-    
+
                 # Add or replace with the new info
                 for idx2, channel in enumerate(['R', 'G', 'B']):
                     json_object[eluant][observation][channel] = list(norm_sample[:, idx2])
-    
+
                 # Save again
-                json_dico = json.dumps(json_object, indent = 2) 
+                json_dico = json.dumps(json_object, indent = 2)
                 with open(save_path, "w") as outfile:
                     outfile.write(json_dico)
 
@@ -200,13 +209,13 @@ class HPTLC_extracter():
 
         # Aggregate values by bin using `np.bincount`
         binned_array = np.bincount(bin_indices, weights=sample) / np.bincount(bin_indices)
-        
+
         return binned_array
 
     @staticmethod
     def check_bckg_exists(names):
         if not "" in names:
-            message = "\n\n!!!ERROR!!!\nThe name list must contain one empty string that corresponds to the empty track. This empty track is necessary to calibrate the background profile.\n!!!ERROR!!!\n"
+            message = "The name list must contain one empty string that corresponds to the empty track. This empty track is necessary to calibrate the background profile."
             raise ValueError(message)
 
     @staticmethod
@@ -225,7 +234,7 @@ class HPTLC_extracter():
 def main():
 
     import config
-    
+
     hptlc = HPTLC_extracter(config.path, config.names,
                             config.length, config.front, config.X_offset,
                             config.Y_offset, config.inter_spot_dist)
@@ -235,31 +244,22 @@ def main():
 def show_curve():
 
     import config
-    import matplotlib.pyplot as plt 
-    
+    import matplotlib.pyplot as plt
+
     for path in config.show:
 
         # Read previous already existing data
         with open(path, 'r') as openfile:
             json_object = json.load(openfile)
-        
+
         colors = ['r', 'g', 'b']
         RGB = ['R', 'G', 'B']
-        
+
         plt.figure()
         for i in range(3):
             curve = json_object[config.eluant][config.observation][RGB[i]]
             plt.plot(curve, color=colors[i])
 
         plt.title(path)
-    
-    plt.show()
 
-    
-    
-    
-    
-    
-    
-    
-    
+    plt.show()
