@@ -8,6 +8,7 @@ import os
 import hptlc
 import config
 import warnings
+import time
 
 def mesure_distances(main_folder_path, name):
 
@@ -15,6 +16,7 @@ def mesure_distances(main_folder_path, name):
     with open(f"{main_folder_path}/standard/{name}", 'r') as openfile:
         main_object = json.load(openfile)
 
+    main_df = pd.DataFrame(main_object)
     all_col_names = [f'{elu}_{obs}' for elu in main_object for obs in main_object[elu]]
     others = [f for f in listdir(main_folder_path+"/standard/") if isfile(join(main_folder_path+"/standard/", f))]
     others.remove(name)
@@ -22,29 +24,9 @@ def mesure_distances(main_folder_path, name):
     all_distances = []
     for other in others:
         with open(f"{main_folder_path}/standard/{other}", 'r') as openfile:
-            other_object = json.load(openfile)
+            other_df = pd.DataFrame(json.load(openfile))
 
-
-        distances = []
-        for elu in main_object:
-            for obs in main_object[elu]:
-                main_data = main_object[elu][obs]
-                other_data = other_object[elu][obs]
-
-                if (other_data['R'] != []) & (main_data['R'] != []):
-
-                    other_to_compare = np.array([other_data['R'],
-                                                    other_data['G'],
-                                                    other_data['B']])
-                    main_to_compare = np.array([main_data['R'],
-                                                    main_data['G'],
-                                                    main_data['B']])
-
-                    distances.append(compute_single_distance_dtw(np.array(main_to_compare), np.array(other_to_compare)))
-
-                else:
-                    distances.append(np.nan)
-
+        distances = main_df.combine(other_df, func=apply_dist_col).values.flatten()
         all_distances.append(distances)
 
     new_others = [k[:-5] for k in others if k[-5:]=='.json']
@@ -74,6 +56,20 @@ def mesure_distances(main_folder_path, name):
     save_name = main_folder_path + '/distances/' + name[:-5] if name[-5:]=='.json' else name
     to_dump.to_csv(save_name + ".csv", index=False)
 
+# Apply functions used to speed up the computation with Pandas
+def apply_dist_col(col1, col2):
+    return col1.combine(col2, func=apply_dist_row)
+
+def apply_dist_row(dict1, dict2):
+
+    array1 = np.array([dict1['R'], dict1['G'], dict1['B']])
+    array2 = np.array([dict2['R'], dict2['G'], dict2['B']])
+
+    if np.shape(array1) == np.shape(array2):
+        return compute_single_distance(array1, array2)
+
+    else:
+        return np.nan
 
 def compute_single_distance(data1, data2):
     diff = abs(data1 - data2)
@@ -87,7 +83,7 @@ def compute_single_distance_dtw(data1, data2):
     ds = []
     for order in [[0, 1], [1, 0]]:
         for i in range(3):
-            # Find the dtw map mapping because data 1 and 2. Then use it to compute the squared difference of the two remapped profiles.
+            # Find the dtw map mapping because data 1 and 2. Then use it to compute the squared difference of the two remapp ed profiles.
             # Because the mapping of data 1 to data 2 is not exactly the same as data 2 to data 1, we do it twice and average.
 
             dtw_map = dtw.dtw(datas[order[0]][i], datas[order[1]][i], keep_internals=True,
@@ -156,12 +152,12 @@ def plot_distance_graph(G, labels, scaled_weights, save_path):
     nx.draw(G, pos=pos)
 
     # nodes
-    options = {"edgecolors": "tab:gray", "node_size": 1200, "alpha": 0.9}
+    options = {"edgecolors": "tab:gray", "node_size": 2000, "alpha": 0.9}
     nx.draw_networkx_nodes(G, pos, **options)
 
     # edges
     nx.draw_networkx_edges(G, pos, width=scaled_weights, alpha=1)
-    nx.draw_networkx_labels(G, pos, labels, font_size=16, font_color="whitesmoke")
+    nx.draw_networkx_labels(G, pos, labels, font_size=16, font_color="black")
 
     plt.axis("off")
     plt.savefig(save_path)
@@ -213,5 +209,6 @@ def main():
     main_folder_path = hptlc.HPTLC_extracter.main_folder_path
 
     for name in config.compute_distances:
+        print(name)
         mesure_distances(main_folder_path, name)
         show_results(main_folder_path, name, n=config.show_n_best)
