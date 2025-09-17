@@ -36,21 +36,10 @@ It will show all the HPTLC curves specified in the variable "show" from the `con
 
 ## Compare samples
 
-One of the main advantage of having a standardize package to extract HPTLC curves is that we can perform data analysis. In `compare.py` we propose a metric to compute the similarity between any sample and the rest of the samples. In practice, we compute a distance that reprensents the similarity between normalized sample spectra . In order to compute the distance of a single sample to all others, simply fill the compute_distances variable inside `config.py` and run:
+One of the main advantage of having a standardize package to extract HPTLC curves is that we can perform data analysis. In `compare.py` we propose a metric to compute the similarity between any sample and the rest of the samples. In practice, we compute a distance that represents the similarity between normalized sample spectra . In order to compute a graph representing distances between all samples:
 
 ```sh
 python -c "import compare; compare.main()"
 ```
 
-If you want to automatically compute all distances of all samples, you can run:
-
-```sh
-python -c "import compare; compare.compute_all_distances()"
-```
-
-Finally, once *all distances* have been computed, you can produce interesting outputs. By running:
-
-```sh
-python -c "import compare; compare.matrix_and_graph()"
-```
 You will create two files: `distances/analysis/summary_matrix.csv` and `distances/analysis/summary_graph.png`. The first file summarizes the normalized distances of every sample to every other samples in a single matrix. The second one is a graph that visually represents your database. In this graph, only the most similar samples are connected to each other. The connection is done based on threshold value that can be changed in the `config.py` file. In addition, the thickness of the lines scales with the similarity of the samples. Keep in mind that the length of the lines carry no meaning !! Two nodes close to each other in the plot does not imply that they are similar. 
