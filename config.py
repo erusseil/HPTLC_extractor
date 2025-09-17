@@ -26,19 +26,17 @@ names = ['c0',
  'c15']
 
 # Path to the experiment folder (must leave the r before the string if using Windows path)
-# Must contain images of the form: eluant_observation.png (for example MDPS_254nm.png)
-path = r"C:\Users\Haris\Desktop\HPTLC_extractor\controled_images"
+# Must contain images of the form: eluant_observation.png (for example MPDS_254nm.png)
+path = "/home/etru7215/Documents/other/HPTLC/images/"
 
 
 # Curve visualization, i.e. using show_curve().
 # Indicate eluant and observation that you want to look at
 #NB: A list of files can be input for multiple visualization at once
-eluant = 'LPDS'
-observation = '366nm'
-show = [r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\standard\c7.json",
-        r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\raw\c7.json",
-        r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\standard\c0.json",
-        r"C:\Users\Haris\Desktop\HPTLC_extractor\HPTLC_data\raw\c0.json"]
+eluant = 'MPDS'
+observation = '254nm'
+show = ["/home/etru7215/Documents/other/HPTLC/HPTLC_extractor/HPTLC_data/raw/c7.json",
+        "/home/etru7215/Documents/other/HPTLC/HPTLC_extractor/HPTLC_data/standard/c7.json"]
 
 compute_distances = ["c0", "c7"]
 show_n_best = 5

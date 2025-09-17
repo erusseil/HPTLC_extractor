@@ -179,8 +179,10 @@ class HPTLC_extracter():
         for eluant in HPTLC_extracter.standard_eluants:
             for observation in HPTLC_extracter.standard_observations:
                 check = f'{eluant}_{observation}'
+
                 if check in all_names:
                     image_path = f'{self.path}/{all_files[all_names.index(check)]}'
+                    print(image_path)
                     self.extract_one_image(image_path, eluant, observation)
                     print(f'{check} extracted !')
 
@@ -231,16 +233,6 @@ class HPTLC_extracter():
         return baseline - median
 
 
-def main():
-
-    import config
-
-    hptlc = HPTLC_extracter(config.path, config.names,
-                            config.length, config.front, config.X_offset,
-                            config.Y_offset, config.inter_spot_dist)
-
-    hptlc.extract_all_images()
-
 def show_curve():
 
     import config
@@ -263,3 +255,13 @@ def show_curve():
         plt.title(path)
 
     plt.show()
+
+
+def main():
+    import config
+
+    hptlc = HPTLC_extracter(config.path, config.names,
+                            config.length, config.front, config.X_offset,
+                            config.Y_offset, config.inter_spot_dist)
+
+    hptlc.extract_all_images()

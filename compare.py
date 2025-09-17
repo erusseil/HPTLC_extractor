@@ -9,88 +9,113 @@ import hptlc
 import config
 import warnings
 import time
+import skfda
+from skfda.preprocessing.dim_reduction import FPCA
+import glob
+import math
 
-def mesure_distances(main_folder_path, name):
+n_components = 5
 
-    # Open sample of interest
-    with open(f"{main_folder_path}/standard/{name}", 'r') as openfile:
-        main_object = json.load(openfile)
 
-    main_df = pd.DataFrame(main_object)
-    all_col_names = [f'{elu}_{obs}' for elu in main_object for obs in main_object[elu]]
-    others = [f for f in listdir(main_folder_path+"/standard/") if isfile(join(main_folder_path+"/standard/", f))]
-    others.remove(name)
+def get_file_names(main_folder_path):
+    files = []
+    for file in os.listdir(f"{main_folder_path}/standard/"):
+        if file.endswith(".json"):
+            files.append(file)
+    files.sort()
+    no_extension_files = [k[:-5] for k in files]
+    return files, no_extension_files
+    
+def create_feature_tables(main_folder_path):
 
+    files, no_extension_files = get_file_names(main_folder_path)
+    
+    if not os.path.isdir(f"{main_folder_path}/features/"):
+        os.makedirs(f"{main_folder_path}/features/")
+
+    indexes = []
+    for elu in hptlc.HPTLC_extracter.standard_eluants:
+        for obs in hptlc.HPTLC_extracter.standard_observations:
+            indexes.append(elu + "_" + obs)
+
+    empty = pd.DataFrame(data=None, index=range(n_components), columns=indexes)
+
+    for file in no_extension_files:
+        if not os.path.isfile(f"{main_folder_path}/features/{file}.csv"):
+            empty.to_csv(f"{main_folder_path}/features/{file}.csv", index=False)
+
+
+def update_fpca(main_folder_path, elu, obs):
+
+    # Create new tables in case a new molecule was added
+    create_feature_tables(main_folder_path)
+    files, no_extension_files = get_file_names(main_folder_path)
+
+    all_curves = []
+    for file in files:
+        curve = pd.read_json(f"{main_folder_path}/standard/{file}")[elu][obs]
+        empty = [len(curve[col])==0 for col in ["R", "G", "B"]]
+        if not any(empty):
+            all_curves.append(curve['R']+curve['G']+curve['B'])
+
+    data_matrix = np.array(all_curves)
+
+    if np.size(data_matrix)>0:
+
+        fd = skfda.representation.grid.FDataGrid(
+            data_matrix=data_matrix,
+            grid_points=np.linspace(0, 1, data_matrix.shape[1])
+        )
+        
+        fpca = FPCA(n_components=n_components)
+        fpca.fit(fd)
+        coefficients = fpca.transform(fd)
+    
+        # Update with new coeffiecients
+        for idx, file in enumerate(no_extension_files):
+            previous = pd.read_csv(f"{main_folder_path}/features/{file}.csv")
+            previous[f'{elu}_{obs}'] = coefficients[idx]
+            previous.to_csv(f"{main_folder_path}/features/{file}.csv", index=False)
+
+def compute_specific_distances(main_folder_path):
+
+    files, no_extension_files = get_file_names(main_folder_path)
+    
+    if not os.path.isdir(f"{main_folder_path}/distances/"):
+        os.makedirs(f"{main_folder_path}/distances/")
+
+    for elu in hptlc.HPTLC_extracter.standard_eluants:
+        for obs in hptlc.HPTLC_extracter.standard_observations:
+            coefs = []
+            for file in no_extension_files:
+                coefs.append(pd.read_csv(f"{main_folder_path}/features/{file}.csv")[f"{elu}_{obs}"].values)
+
+            distances = []
+            for f1 in coefs:
+                f1_dists = []
+                for f2 in coefs:
+                    if (any(np.isnan(f1))) | (any(np.isnan(f2))):
+                        f1_dists.append(np.nan)
+                    else:
+                        f1_dists.append(round(math.dist(f1, f2), 4))
+                distances.append(f1_dists)
+
+            final = pd.DataFrame(data=distances, columns=no_extension_files, index=no_extension_files)
+            final.to_csv(f"{main_folder_path}/distances/{elu}_{obs}.csv")
+                
+def compute_global_distances(main_folder_path):
+
+    files, no_extension_files = get_file_names(main_folder_path)
+
+    compute_specific_distances(main_folder_path)
     all_distances = []
-    for other in others:
-        with open(f"{main_folder_path}/standard/{other}", 'r') as openfile:
-            other_df = pd.DataFrame(json.load(openfile))
+    for elu in hptlc.HPTLC_extracter.standard_eluants:
+        for obs in hptlc.HPTLC_extracter.standard_observations:
+            all_distances.append(pd.read_csv(f"{main_folder_path}/distances/{elu}_{obs}.csv").iloc[:, 1:].values)
 
-        distances = main_df.combine(other_df, func=apply_dist_col).values.flatten()
-        all_distances.append(distances)
-
-    new_others = [k[:-5] for k in others if k[-5:]=='.json']
-
-    if not os.path.isdir(main_folder_path + "/distances"):
-        os.makedirs(main_folder_path + "/distances")
-
-    if not os.path.isdir(main_folder_path + "/distances/analysis/"):
-        os.makedirs(main_folder_path + "/distances/analysis/")
-
-    to_dump = pd.DataFrame(data={"Name":new_others})
-
-    for idx, col_name in enumerate(all_col_names):
-        to_dump[col_name] = np.array(all_distances)[:, idx]
-
-    df = to_dump.iloc[:, 1:]
-
-    # Create a mean normalized so that each column weighs the same
-    warnings.filterwarnings(action='ignore', message='Mean of empty slice')
-    col_normed = df / np.nanmean(df, axis=0)
-    norm_mean = np.nanmean(col_normed, axis=1)
-
-    to_dump['Normalized distance'] = np.round(norm_mean, 4)
-    to_dump['Mean distance'] = np.round(np.nanmean(df, axis=1), 4)
-    to_dump = to_dump.sort_values("Normalized distance")
-    to_dump = to_dump[['Name', "Normalized distance", "Mean distance"] + all_col_names]
-    save_name = main_folder_path + '/distances/' + name[:-5] if name[-5:]=='.json' else name
-    to_dump.to_csv(save_name + ".csv", index=False)
-
-# Apply functions used to speed up the computation with Pandas
-def apply_dist_col(col1, col2):
-    return col1.combine(col2, func=apply_dist_row)
-
-def apply_dist_row(dict1, dict2):
-
-    array1 = np.array([dict1['R'], dict1['G'], dict1['B']])
-    array2 = np.array([dict2['R'], dict2['G'], dict2['B']])
-
-    if np.shape(array1) == np.shape(array2):
-        return compute_single_distance(array1, array2)
-
-    else:
-        return np.nan
-
-def compute_single_distance(data1, data2):
-    diff = abs(data1 - data2)
-    distance = np.sum(diff)/np.shape(data1)[1]
-    return np.round(distance, 4)
-
-def compute_single_distance_dtw(data1, data2):
-    import dtw
-
-    datas = (data1, data2)
-    ds = []
-    for order in [[0, 1], [1, 0]]:
-        for i in range(3):
-            # Find the dtw map mapping because data 1 and 2. Then use it to compute the squared difference of the two remapp ed profiles.
-            # Because the mapping of data 1 to data 2 is not exactly the same as data 2 to data 1, we do it twice and average.
-
-            dtw_map = dtw.dtw(datas[order[0]][i], datas[order[1]][i], keep_internals=True,
-                step_pattern=dtw.rabinerJuangStepPattern(6, "c"))
-            ds.append(np.mean(np.square(datas[order[0]][i][dtw_map.index1] - datas[order[1]][i][dtw_map.index2])))
-
-    return np.round(np.mean(ds), 6)
+    global_distance = np.nanmean(all_distances, axis=0)
+    global_df = pd.DataFrame(data=global_distance, columns=no_extension_files, index=no_extension_files)
+    global_df.to_csv(f"{main_folder_path}/distances/average_distances.csv")
 
 
 def show_results(main_folder_path, name, n=5):
@@ -112,7 +137,7 @@ def show_results(main_folder_path, name, n=5):
 
 def produce_full_graph(main_folder_path, thresh):
 
-    matrix = pd.read_csv(main_folder_path + 'distances/analysis/summary_matrix.csv')
+    matrix = pd.read_csv(main_folder_path + 'distances/average_distances.csv')
     m = np.array(matrix)[:, 1:]
     m_contiunous = m.copy().astype(float)
 
@@ -131,7 +156,7 @@ def produce_full_graph(main_folder_path, thresh):
                 edge_weights.append(1/(m_contiunous[i, j]))  # Assign distance as edge weight
 
     if edge_weights == []:
-        print("The linking threshold is too low or the samples are too different. No link have a created. No graph has been computed")
+        print("The linking threshold is too low or the samples are too different. No link has been created. No graph has been computed")
 
     else:
         # The scaling is temporary and a better one should be chosen once more data is available
@@ -139,7 +164,7 @@ def produce_full_graph(main_folder_path, thresh):
         max_weight = max(edge_weights)
         scaled_weights = [0.5 + 5 * (weight - min_weight) / (max_weight - min_weight) for weight in edge_weights]
 
-        plot_distance_graph(G, dict(matrix['Unnamed: 0']), scaled_weights, main_folder_path + 'distances/analysis/summary_graph.png')
+        plot_distance_graph(G, dict(matrix['Unnamed: 0']), scaled_weights, main_folder_path + 'distances/summary_graph.png')
 
 
 def plot_distance_graph(G, labels, scaled_weights, save_path):
@@ -163,14 +188,6 @@ def plot_distance_graph(G, labels, scaled_weights, save_path):
     plt.savefig(save_path)
     plt.show()
 
-def compute_all_distances():
-
-    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
-    path = main_folder_path + '/standard/'
-
-    all_files = [f for f in listdir(path) if isfile(join(path, f))]
-    for name in all_files:
-            mesure_distances(main_folder_path, name)
 
 def matrix_and_graph():
 
@@ -208,7 +225,13 @@ def main():
 
     main_folder_path = hptlc.HPTLC_extracter.main_folder_path
 
-    for name in config.compute_distances:
-        print(name)
-        mesure_distances(main_folder_path, name)
-        show_results(main_folder_path, name, n=config.show_n_best)
+    for elu in hptlc.HPTLC_extracter.standard_eluants:
+        for obs in hptlc.HPTLC_extracter.standard_observations:
+            update_fpca(main_folder_path, elu, obs)
+
+    compute_global_distances(main_folder_path)
+    produce_full_graph(main_folder_path, config.threshold_graph)
+
+
+if __name__=="__main__":
+    main()
