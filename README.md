@@ -15,31 +15,8 @@ pip install -r requirements.txt
 
 ## How to use it
 
-Then, you should fill the `config.py` file with the information from your experiment and save the changes. This is the only file that you should need to modify. Once everything is setup you can run the tool.
-
-
-On your terminal you can execute:
-```sh
-python -c "import hptlc; hptlc.main()"
-```
-
-This will result in the creation of well structured storage files. However, it requires standard HPTLC procedures and does not allow anything else. 
-
-
-If you want to visualize some json files you can run:
-```sh
-python -c "import hptlc; hptlc.show_curve()"
-```
-
-It will show all the HPTLC curves specified in the variable "show" from the `config.py` file.
-
-
-## Compare samples
-
-One of the main advantage of having a standardize package to extract HPTLC curves is that we can perform data analysis. In `compare.py` we propose a metric to compute the similarity between any sample and the rest of the samples. In practice, we compute a distance that represents the similarity between normalized sample spectra . In order to compute a graph representing distances between all samples:
+You are ready to use with a simple command. On your terminal you can execute:
 
 ```sh
-python -c "import compare; compare.main()"
+streamlit run app.py"
 ```
-
-You will create two files: `distances/analysis/summary_matrix.csv` and `distances/analysis/summary_graph.png`. The first file summarizes the normalized distances of every sample to every other samples in a single matrix. The second one is a graph that visually represents your database. In this graph, only the most similar samples are connected to each other. The connection is done based on threshold value that can be changed in the `config.py` file. In addition, the thickness of the lines scales with the similarity of the samples. Keep in mind that the length of the lines carry no meaning !! Two nodes close to each other in the plot does not imply that they are similar. 
