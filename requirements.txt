@@ -4,4 +4,5 @@ imageio>=2.35.1
 pandas>=2.0.3
 pybaselines>=1.1.0
 networkx>=3.4.2
-dtw-python==1.5.3
+scikit-fda>=0.10.1
+streamlit>=1.49.1

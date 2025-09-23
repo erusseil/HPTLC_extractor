@@ -1,23 +1,17 @@
-import json
 import numpy as np
 import networkx as nx
-from os import listdir
-from os.path import isfile, join
 import pandas as pd
 import os
 import hptlc
 import config
-import warnings
-import time
 import skfda
 from skfda.preprocessing.dim_reduction import FPCA
-import glob
 import math
 
 n_components = 5
+main_folder_path = hptlc.HPTLC_extracter.main_folder_path
 
-
-def get_file_names(main_folder_path):
+def get_file_names():
     files = []
     for file in os.listdir(f"{main_folder_path}/standard/"):
         if file.endswith(".json"):
@@ -26,9 +20,9 @@ def get_file_names(main_folder_path):
     no_extension_files = [k[:-5] for k in files]
     return files, no_extension_files
     
-def create_feature_tables(main_folder_path):
+def create_feature_tables():
 
-    files, no_extension_files = get_file_names(main_folder_path)
+    files, no_extension_files = get_file_names()
     
     if not os.path.isdir(f"{main_folder_path}/features/"):
         os.makedirs(f"{main_folder_path}/features/")
@@ -45,11 +39,11 @@ def create_feature_tables(main_folder_path):
             empty.to_csv(f"{main_folder_path}/features/{file}.csv", index=False)
 
 
-def update_fpca(main_folder_path, elu, obs):
+def update_fpca(elu, obs):
 
     # Create new tables in case a new molecule was added
-    create_feature_tables(main_folder_path)
-    files, no_extension_files = get_file_names(main_folder_path)
+    create_feature_tables()
+    files, no_extension_files = get_file_names()
 
     all_curves = []
     for file in files:
@@ -77,9 +71,9 @@ def update_fpca(main_folder_path, elu, obs):
             previous[f'{elu}_{obs}'] = coefficients[idx]
             previous.to_csv(f"{main_folder_path}/features/{file}.csv", index=False)
 
-def compute_specific_distances(main_folder_path):
+def compute_specific_distances():
 
-    files, no_extension_files = get_file_names(main_folder_path)
+    files, no_extension_files = get_file_names()
     
     if not os.path.isdir(f"{main_folder_path}/distances/"):
         os.makedirs(f"{main_folder_path}/distances/")
@@ -103,11 +97,11 @@ def compute_specific_distances(main_folder_path):
             final = pd.DataFrame(data=distances, columns=no_extension_files, index=no_extension_files)
             final.to_csv(f"{main_folder_path}/distances/{elu}_{obs}.csv")
                 
-def compute_global_distances(main_folder_path):
+def compute_global_distances():
 
-    files, no_extension_files = get_file_names(main_folder_path)
+    files, no_extension_files = get_file_names()
 
-    compute_specific_distances(main_folder_path)
+    compute_specific_distances()
     all_distances = []
     for elu in hptlc.HPTLC_extracter.standard_eluants:
         for obs in hptlc.HPTLC_extracter.standard_observations:
@@ -118,7 +112,7 @@ def compute_global_distances(main_folder_path):
     global_df.to_csv(f"{main_folder_path}/distances/average_distances.csv")
 
 
-def show_results(main_folder_path, name, n=5):
+def show_results(name, n=5):
 
     #In case the user inputs a file
     if name[-4:]=='.csv':
@@ -135,7 +129,7 @@ def show_results(main_folder_path, name, n=5):
     print('___________________\n')
 
 
-def produce_full_graph(main_folder_path, thresh):
+def produce_full_graph(thresh):
 
     matrix = pd.read_csv(main_folder_path + 'distances/average_distances.csv')
     m = np.array(matrix)[:, 1:]
@@ -189,48 +183,13 @@ def plot_distance_graph(G, labels, scaled_weights, save_path):
     plt.show()
 
 
-def matrix_and_graph():
 
-    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
-    path = main_folder_path + '/distances/'
-    all_files = [f for f in listdir(path) if isfile(join(path, f))]
-
-    dfs = []
-    for file in all_files:
-        dfs.append(pd.read_csv(path + file))
-
-    sample_names = [k[:-4] for k in all_files]
-
-    # Create an empty dictionary to hold the final distance matrix
-    distance_matrix = {name: {name: 0 for name in sample_names} for name in sample_names}
-
-    # Iterate over each dataframe and populate the distance matrix
-    for idx, df in enumerate(dfs):
-        sample_name = sample_names[idx]
-        for _, row in df.iterrows():
-            other_sample = row['Name']
-            distance = row['Normalized distance']
-            distance_matrix[sample_name][other_sample] = distance
-            distance_matrix[other_sample][sample_name] = distance  # for symmetry
-
-    # Convert the dictionary to a DataFrame
-    distance_df = pd.DataFrame(distance_matrix)
-    distance_df.to_csv(main_folder_path + '/distances/analysis/summary_matrix.csv')
-
-    thresh = config.threshold_graph
-    produce_full_graph(main_folder_path, thresh)
-
-
-def main():
-
-    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
-
+def update_all_fpca():
     for elu in hptlc.HPTLC_extracter.standard_eluants:
         for obs in hptlc.HPTLC_extracter.standard_observations:
-            update_fpca(main_folder_path, elu, obs)
+            update_fpca(elu, obs)
 
-    compute_global_distances(main_folder_path)
-    produce_full_graph(main_folder_path, config.threshold_graph)
+    compute_global_distances()
 
 
 if __name__=="__main__":
