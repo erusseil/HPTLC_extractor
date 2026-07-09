@@ -3,7 +3,6 @@ import networkx as nx
 import pandas as pd
 import os
 import hptlc
-import config
 import skfda
 from skfda.preprocessing.dim_reduction import FPCA
 import math
@@ -60,16 +59,31 @@ def update_fpca(elu, obs):
             data_matrix=data_matrix,
             grid_points=np.linspace(0, 1, data_matrix.shape[1])
         )
-        
+
         fpca = FPCA(n_components=n_components)
         fpca.fit(fd)
         coefficients = fpca.transform(fd)
-    
+
         # Update with new coeffiecients
         for idx, file in enumerate(no_extension_files):
             previous = pd.read_csv(f"{main_folder_path}/features/{file}.csv")
             previous[f'{elu}_{obs}'] = coefficients[idx]
             previous.to_csv(f"{main_folder_path}/features/{file}.csv", index=False)
+
+
+def update_all_fpca(progress_callback=None):
+    combos = [
+        (elu, obs)
+        for elu in hptlc.HPTLC_extracter.standard_eluants
+        for obs in hptlc.HPTLC_extracter.standard_observations
+    ]
+
+    for idx, (elu, obs) in enumerate(combos):
+        update_fpca(elu, obs)
+        if progress_callback:
+            progress_callback(idx + 1, len(combos), elu, obs)
+
+    compute_global_distances()
 
 def compute_specific_distances():
 
@@ -112,24 +126,12 @@ def compute_global_distances():
     global_df.to_csv(f"{main_folder_path}/distances/average_distances.csv")
 
 
-def show_results(name, n=5):
+def build_graph(thresh):
+    """Build the similarity graph from the average distance matrix.
 
-    #In case the user inputs a file
-    if name[-4:]=='.csv':
-        name = name[:-4]
-
-    df = pd.read_csv(f"{main_folder_path}/distances/{name}.csv")
-
-    ord_dist, ord_others = df['Normalized distance'], df['Name']
-
-    print(f"\nSamples most similar to {name}:\n")
-    for i in range(min(n, len(ord_others))):
-        print(f"{ord_others[i]} : {ord_dist[i]:.2f}")
-
-    print('___________________\n')
-
-
-def produce_full_graph(thresh):
+    Returns (G, labels, edges, scaled_weights), or (None, None, None, None)
+    if no sample pair is close enough to be linked at this threshold.
+    """
 
     matrix = pd.read_csv(main_folder_path + 'distances/average_distances.csv')
     m = np.array(matrix)[:, 1:]
@@ -142,55 +144,65 @@ def produce_full_graph(thresh):
 
     G = nx.from_numpy_array(m)
 
-    edge_weights = []
+    edges, edge_weights = [], []
     # Iterate over the nodes and add weights from the distance matrix
     for i in list(G.nodes):
         for j in list(G[i]):
             if (m[i, j] != 0) & (i<j):  # Look only if there is an egde on all of the matrix (because it is symmetrical)
+                edges.append((i, j))
                 edge_weights.append(1/(m_contiunous[i, j]))  # Assign distance as edge weight
 
     if edge_weights == []:
-        print("The linking threshold is too low or the samples are too different. No link has been created. No graph has been computed")
+        return None, None, None, None
 
-    else:
-        # The scaling is temporary and a better one should be chosen once more data is available
-        min_weight = min(edge_weights)
-        max_weight = max(edge_weights)
-        scaled_weights = [0.5 + 5 * (weight - min_weight) / (max_weight - min_weight) for weight in edge_weights]
+    # The scaling is temporary and a better one should be chosen once more data is available
+    min_weight = min(edge_weights)
+    max_weight = max(edge_weights)
+    scaled_weights = [0.5 + 5 * (weight - min_weight) / (max_weight - min_weight) for weight in edge_weights]
 
-        plot_distance_graph(G, dict(matrix['Unnamed: 0']), scaled_weights, main_folder_path + 'distances/summary_graph.png')
+    labels = dict(matrix['Unnamed: 0'])
+    return G, labels, edges, scaled_weights
 
 
-def plot_distance_graph(G, labels, scaled_weights, save_path):
+def plotly_distance_graph(G, labels, edges, scaled_weights):
 
-    import matplotlib.pyplot as plt
+    import plotly.graph_objects as go
 
     pos = nx.forceatlas2_layout(G, seed=42, strong_gravity=True)  # positions for all nodes
 
-    plt.figure(figsize=(10,10))
-    nx.draw(G, pos=pos)
+    edge_traces = []
+    for (i, j), weight in zip(edges, scaled_weights):
+        x0, y0 = pos[i]
+        x1, y1 = pos[j]
+        edge_traces.append(go.Scatter(
+            x=[x0, x1], y=[y0, y1],
+            mode="lines",
+            line=dict(width=weight, color="#94A3B8"),
+            hoverinfo="skip",
+            showlegend=False,
+        ))
 
-    # nodes
-    options = {"edgecolors": "tab:gray", "node_size": 2000, "alpha": 0.9}
-    nx.draw_networkx_nodes(G, pos, **options)
+    node_x = [pos[n][0] for n in G.nodes]
+    node_y = [pos[n][1] for n in G.nodes]
+    node_text = [labels[n] for n in G.nodes]
 
-    # edges
-    nx.draw_networkx_edges(G, pos, width=scaled_weights, alpha=1)
-    nx.draw_networkx_labels(G, pos, labels, font_size=16, font_color="black")
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        text=node_text,
+        textposition="top center",
+        hovertext=node_text,
+        hoverinfo="text",
+        marker=dict(size=24, color="#0F766E", line=dict(width=1.5, color="#134E4A")),
+        showlegend=False,
+    )
 
-    plt.axis("off")
-    plt.savefig(save_path)
-    plt.show()
-
-
-
-def update_all_fpca():
-    for elu in hptlc.HPTLC_extracter.standard_eluants:
-        for obs in hptlc.HPTLC_extracter.standard_observations:
-            update_fpca(elu, obs)
-
-    compute_global_distances()
-
-
-if __name__=="__main__":
-    main()
+    fig = go.Figure(data=edge_traces + [node_trace])
+    fig.update_layout(
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        margin=dict(l=10, r=10, t=10, b=10),
+        height=650,
+        plot_bgcolor="white",
+    )
+    return fig

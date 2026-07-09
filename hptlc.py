@@ -78,33 +78,53 @@ class HPTLC_extracter():
                         outfile.write(json_object_std)
 
     @staticmethod
-    def convert_image_to_array(path, length, X_offset, Y_offset, front, inter_spot_dist, names):
+    def compute_spot_windows(image_shape, length, X_offset, Y_offset, front, inter_spot_dist, names):
+        """Pixel rectangle (top, bottom, left, right) sampled for each name on
+        the plate, given the plate geometry. Shared by the actual extraction
+        and by the spot-preview overlay shown before extracting."""
 
         HPTLC_extracter.check_bckg_exists(names)
 
-        bckg_arg = np.where(np.array(names) == 'bckg')[0][0]
-        image = iio.imread(os.path.normpath(path))
-        pixel_size = length/np.shape(image)[1]
+        pixel_size = length / image_shape[1]
         half_window = HPTLC_extracter.half_window
-        extra = int(HPTLC_extracter.extra * front/pixel_size)
-        space = inter_spot_dist/pixel_size
+        extra = int(HPTLC_extracter.extra * front / pixel_size)
 
-        all_samples = []
-        for n in range(len(names)):
+        windows = []
+        for n, name in enumerate(names):
             center = int(X_offset/pixel_size + n * inter_spot_dist/pixel_size)
-            bottom = min(np.shape(image)[0], int(np.shape(image)[0] - Y_offset/pixel_size + extra))
+            bottom = min(image_shape[0], int(image_shape[0] - Y_offset/pixel_size + extra))
             top = max(0, int(bottom - front/pixel_size - 2 * extra))
 
-
-            if (top > np.shape(image)[0]) | (bottom < 0):
+            if (top > image_shape[0]) | (bottom < 0):
                 message = "The inputed height dimensions must be wrong"
                 raise ValueError(message)
 
-            if ((center + half_window) > np.shape(image)[1]) | (center < 0):
+            if ((center + half_window) > image_shape[1]) | (center < 0):
                 message = "The inputed width dimensions must be wrong"
                 raise ValueError(message)
 
-            rectangle = image[bottom:top:-1, center - half_window : center + half_window, :3]
+            windows.append({
+                "name": name,
+                "top": top,
+                "bottom": bottom,
+                "left": center - half_window,
+                "right": center + half_window,
+            })
+
+        return windows
+
+    @staticmethod
+    def convert_image_to_array(path, length, X_offset, Y_offset, front, inter_spot_dist, names):
+
+        image = iio.imread(os.path.normpath(path))
+        windows = HPTLC_extracter.compute_spot_windows(
+            np.shape(image), length, X_offset, Y_offset, front, inter_spot_dist, names
+        )
+        bckg_arg = np.where(np.array(names) == 'bckg')[0][0]
+
+        all_samples = []
+        for n, window in enumerate(windows):
+            rectangle = image[window["bottom"]:window["top"]:-1, window["left"]:window["right"], :3]
             averaged = np.mean(rectangle, axis=1)
 
             if n != bckg_arg:
@@ -182,7 +202,10 @@ class HPTLC_extracter():
                         outfile.write(json_dico)
 
         else:
-            print("Invalid file name ! Should contain eluant_observation")
+            message = ("Invalid file name — it must contain both an eluant "
+                       f"({', '.join(HPTLC_extracter.standard_eluants)}) and an observation "
+                       f"({', '.join(HPTLC_extracter.standard_observations)}), e.g. MPDS_254nm.png")
+            raise ValueError(message)
 
     @staticmethod
     def normalize(sample, background, resolution, lam):
@@ -232,7 +255,6 @@ class HPTLC_extracter():
 
 def show_curve(path1, elu, obs, path2):
 
-    import config
     import matplotlib.pyplot as plt
 
 
@@ -268,14 +290,5 @@ def show_curve(path1, elu, obs, path2):
             ax.plot(curve2, color=pastel_colors[i], label=f"{label2} ({RGB[i]})", linestyle="dashed", alpha=1)        
         
     ax.legend()
-    
+
     return fig
-
-def main():
-    import config
-
-    hptlc = HPTLC_extracter(config.path, config.names,
-                            config.length, config.front, config.X_offset,
-                            config.Y_offset, config.inter_spot_dist)
-
-    hptlc.extract_all_images()
