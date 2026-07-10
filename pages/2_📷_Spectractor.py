@@ -84,8 +84,13 @@ with settings_col:
 
 with preview_col:
     st.subheader("Upload & check alignment")
+
+    cond_cols = st.columns(2)
+    eluant = cond_cols[0].selectbox("Eluant used", hptlc.HPTLC_extracter.standard_eluants)
+    observation = cond_cols[1].selectbox("Observation", hptlc.HPTLC_extracter.standard_observations)
+
     uploaded_files = st.file_uploader(
-        "Upload PNG plate photos (filename must contain the eluant and observation, e.g. MPDS_254nm.png)",
+        f"Upload PNG plate photo(s) for {eluant} / {observation}",
         type=["png"], accept_multiple_files=True,
     )
 
@@ -117,7 +122,7 @@ with preview_col:
         results = []
         for i, (filename, file_path) in enumerate(files_info):
             try:
-                eluant, observation = extractor.extract_one_image(file_path)
+                extractor.extract_one_image(file_path, eluant, observation)
                 results.append((filename, True, ""))
                 st.session_state["last_extracted_eluant"] = eluant
                 st.session_state["last_extracted_obs"] = observation

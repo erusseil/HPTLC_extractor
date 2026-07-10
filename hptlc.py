@@ -136,78 +136,59 @@ class HPTLC_extracter():
         return np.array(all_samples), bckg
 
 
-    def extract_one_image(self, image_path):
+    def extract_one_image(self, image_path, eluant, observation):
 
         self.create_product_folder()
 
-        eluant, observation = "", ""
-        
-        for eluant_name in HPTLC_extracter.standard_eluants:
-            if eluant_name in image_path:
-                eluant = eluant_name
+        all_sample, bckg = self.convert_image_to_array(image_path, self.length,
+                                                 self.X_offset, self.Y_offset,
+                                                 self.front, self.inter_spot_dist,
+                                                 self.names)
 
-        for obs_name in HPTLC_extracter.standard_observations:
-            if obs_name in image_path:
-                observation = obs_name
+        # For the raw data
+        idx = 0
+        for k in range(len(self.names)):
+            if self.names[k] != 'bckg':
+                sample = all_sample[idx]
+                save_path = f"{self.main_folder_path}/raw/{self.names[k]}.json"
+                idx += 1
 
-        if (eluant != '') & (observation != ''):
-            all_sample, bckg = self.convert_image_to_array(image_path, self.length,
-                                                     self.X_offset, self.Y_offset,
-                                                     self.front, self.inter_spot_dist,
-                                                     self.names)
-    
-            # For the raw data
-            idx = 0
-            for k in range(len(self.names)):
-                if self.names[k] != 'bckg':
-                    sample = all_sample[idx]
-                    save_path = f"{self.main_folder_path}/raw/{self.names[k]}.json"
-                    idx += 1
-    
-                    # Read previous already existing data
-                    with open(save_path, 'r') as openfile:
-                        json_object = json.load(openfile)
-    
-                    # Add or replace with the new info
-                    for idx2, channel in enumerate(['R', 'G', 'B']):
-                        json_object[eluant][observation][channel] = list(sample[:, idx2])
-                        json_object[eluant][observation]['background'][channel] = list(bckg[:, idx2])
-    
-    
-                    # Save again
-                    json_dico = json.dumps(json_object, indent = 2)
-                    with open(save_path, "w") as outfile:
-                        outfile.write(json_dico)
-    
-            #Same for the normalized data
-            idx = 0
-            for k in range(len(self.names)):
-                if self.names[k] != 'bckg':
-                    sample = all_sample[idx]
-                    norm_sample = self.normalize(sample, bckg, self.resolution, self.lam)
-                    save_path = f"{self.main_folder_path}/standard/{self.names[k]}.json"
-                    idx += 1
-    
-                    # Read previous already existing data
-                    with open(save_path, 'r') as openfile:
-                        json_object = json.load(openfile)
-    
-                    # Add or replace with the new info
-                    for idx2, channel in enumerate(['R', 'G', 'B']):
-                        json_object[eluant][observation][channel] = list(norm_sample[:, idx2])
-    
-                    # Save again
-                    json_dico = json.dumps(json_object, indent = 2)
-                    with open(save_path, "w") as outfile:
-                        outfile.write(json_dico)
+                # Read previous already existing data
+                with open(save_path, 'r') as openfile:
+                    json_object = json.load(openfile)
 
-            return eluant, observation
+                # Add or replace with the new info
+                for idx2, channel in enumerate(['R', 'G', 'B']):
+                    json_object[eluant][observation][channel] = list(sample[:, idx2])
+                    json_object[eluant][observation]['background'][channel] = list(bckg[:, idx2])
 
-        else:
-            message = ("Invalid file name — it must contain both an eluant "
-                       f"({', '.join(HPTLC_extracter.standard_eluants)}) and an observation "
-                       f"({', '.join(HPTLC_extracter.standard_observations)}), e.g. MPDS_254nm.png")
-            raise ValueError(message)
+
+                # Save again
+                json_dico = json.dumps(json_object, indent = 2)
+                with open(save_path, "w") as outfile:
+                    outfile.write(json_dico)
+
+        #Same for the normalized data
+        idx = 0
+        for k in range(len(self.names)):
+            if self.names[k] != 'bckg':
+                sample = all_sample[idx]
+                norm_sample = self.normalize(sample, bckg, self.resolution, self.lam)
+                save_path = f"{self.main_folder_path}/standard/{self.names[k]}.json"
+                idx += 1
+
+                # Read previous already existing data
+                with open(save_path, 'r') as openfile:
+                    json_object = json.load(openfile)
+
+                # Add or replace with the new info
+                for idx2, channel in enumerate(['R', 'G', 'B']):
+                    json_object[eluant][observation][channel] = list(norm_sample[:, idx2])
+
+                # Save again
+                json_dico = json.dumps(json_object, indent = 2)
+                with open(save_path, "w") as outfile:
+                    outfile.write(json_dico)
 
     @staticmethod
     def normalize(sample, background, resolution, lam):
