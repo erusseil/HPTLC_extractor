@@ -45,11 +45,13 @@ def update_fpca(elu, obs):
     files, no_extension_files = get_file_names()
 
     all_curves = []
-    for file in files:
+    included_files = []
+    for file, name in zip(files, no_extension_files):
         curve = pd.read_json(f"{main_folder_path}/standard/{file}")[elu][obs]
         empty = [len(curve[col])==0 for col in ["R", "G", "B"]]
         if not any(empty):
             all_curves.append(curve['R']+curve['G']+curve['B'])
+            included_files.append(name)
 
     data_matrix = np.array(all_curves)
 
@@ -64,8 +66,8 @@ def update_fpca(elu, obs):
         fpca.fit(fd)
         coefficients = fpca.transform(fd)
 
-        # Update with new coeffiecients
-        for idx, file in enumerate(no_extension_files):
+        # Update with new coeffiecients (only for samples that had data for this combo)
+        for idx, file in enumerate(included_files):
             previous = pd.read_csv(f"{main_folder_path}/features/{file}.csv")
             previous[f'{elu}_{obs}'] = coefficients[idx]
             previous.to_csv(f"{main_folder_path}/features/{file}.csv", index=False)
