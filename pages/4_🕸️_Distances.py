@@ -20,6 +20,9 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Recompute")
+    if ui.distances_are_stale():
+        st.warning("New or changed data since the last recompute — the graph and "
+                   "tables below don't reflect it yet.")
     if st.button("🔁 Recompute all distances", use_container_width=True):
         progress = st.progress(0.0, text="Starting...")
 

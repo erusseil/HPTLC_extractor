@@ -26,6 +26,10 @@ metric_cols[0].metric("Samples in database", n_samples)
 metric_cols[1].metric("Eluant × observation combos tracked", n_combos)
 metric_cols[2].metric("Data coverage", coverage_pct)
 
+if ui.distances_are_stale():
+    st.warning("New or changed data since the last recompute — the similarity graph and "
+               "distances on the Distances page don't reflect it yet.")
+
 st.subheader("Guided workflow")
 step_cols = st.columns(3)
 with step_cols[0]:

@@ -72,3 +72,46 @@ def get_coverage():
         rows[name] = row
 
     return pd.DataFrame.from_dict(rows, orient="index", columns=combos)
+
+
+def get_names_with_existing_data(names, eluant, observation):
+    """Which of the given (non-bckg) names already have non-empty standard
+    data for this eluant/observation combo — used to warn before overwriting."""
+    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
+    existing = []
+    for name in names:
+        if name == "bckg":
+            continue
+        path = f"{main_folder_path}/standard/{name}.json"
+        if not os.path.isfile(path):
+            continue
+        with open(path, "r") as f:
+            data = json.load(f)
+        curve = data.get(eluant, {}).get(observation, {})
+        if curve and all(len(curve.get(c, [])) > 0 for c in ["R", "G", "B"]):
+            existing.append(name)
+    return existing
+
+
+def distances_are_stale():
+    """True if any sample's standard data is newer than the last computed
+    average_distances.csv (or if that file doesn't exist yet but samples do)."""
+    main_folder_path = hptlc.HPTLC_extracter.main_folder_path
+    standard_dir = f"{main_folder_path}/standard/"
+    distances_path = f"{main_folder_path}/distances/average_distances.csv"
+
+    if not os.path.isdir(standard_dir):
+        return False
+
+    sample_files = [f for f in os.listdir(standard_dir) if f.endswith(".json")]
+    if not sample_files:
+        return False
+
+    if not os.path.isfile(distances_path):
+        return True
+
+    distances_mtime = os.path.getmtime(distances_path)
+    return any(
+        os.path.getmtime(os.path.join(standard_dir, f)) > distances_mtime
+        for f in sample_files
+    )

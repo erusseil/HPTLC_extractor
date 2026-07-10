@@ -34,6 +34,49 @@ def draw_spot_overlay(image, windows):
     return overlay
 
 
+def run_extraction(files_info, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation):
+    extractor = hptlc.HPTLC_extracter(names, length, front, X_offset, Y_offset, inter_spot_dist)
+    progress = st.progress(0.0, text="Starting extraction...")
+    results = []
+    for i, (filename, file_path) in enumerate(files_info):
+        try:
+            extractor.extract_one_image(file_path, eluant, observation)
+            results.append((filename, True, ""))
+            st.session_state["last_extracted_eluant"] = eluant
+            st.session_state["last_extracted_obs"] = observation
+            st.session_state["extract_nonce"] = st.session_state.get("extract_nonce", 0) + 1
+        except Exception as e:
+            results.append((filename, False, str(e)))
+        progress.progress((i + 1) / len(files_info), text=f"Extracted {filename} ({i + 1}/{len(files_info)})")
+    progress.empty()
+
+    for filename, ok, err in results:
+        if ok:
+            st.success(f"{filename} — extracted")
+        else:
+            st.error(f"{filename} — failed: {err}")
+
+    if any(ok for _, ok, _ in results):
+        st.page_link("pages/3_📈_Visualiser.py", label="→ Go check the extracted curves", icon="📈")
+
+
+@st.dialog("⚠️ Overwrite existing data?")
+def confirm_overwrite_dialog(affected_names, files_info, names, length, front,
+                              X_offset, Y_offset, inter_spot_dist, eluant, observation):
+    st.write(
+        f"**{len(affected_names)} product(s)** already have data for **{eluant} / {observation}**: "
+        f"{', '.join(affected_names)}."
+    )
+    st.write("Extracting now will overwrite it. There's no automatic backup yet, "
+              "so this can't be undone from within the app.")
+
+    col1, col2 = st.columns(2)
+    if col1.button("Cancel", use_container_width=True):
+        st.rerun()
+    if col2.button("Yes, overwrite", type="primary", use_container_width=True):
+        run_extraction(files_info, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation)
+
+
 settings_col, preview_col = st.columns([1, 2])
 
 with settings_col:
@@ -126,26 +169,9 @@ with preview_col:
 
     can_extract = names_valid and bool(files_info) and condition_selected
     if st.button("🧪 Extract spectra", disabled=not can_extract, use_container_width=True):
-        extractor = hptlc.HPTLC_extracter(names, length, front, X_offset, Y_offset, inter_spot_dist)
-        progress = st.progress(0.0, text="Starting extraction...")
-        results = []
-        for i, (filename, file_path) in enumerate(files_info):
-            try:
-                extractor.extract_one_image(file_path, eluant, observation)
-                results.append((filename, True, ""))
-                st.session_state["last_extracted_eluant"] = eluant
-                st.session_state["last_extracted_obs"] = observation
-                st.session_state["extract_nonce"] = st.session_state.get("extract_nonce", 0) + 1
-            except Exception as e:
-                results.append((filename, False, str(e)))
-            progress.progress((i + 1) / len(files_info), text=f"Extracted {filename} ({i + 1}/{len(files_info)})")
-        progress.empty()
-
-        for filename, ok, err in results:
-            if ok:
-                st.success(f"{filename} — extracted")
-            else:
-                st.error(f"{filename} — failed: {err}")
-
-        if any(ok for _, ok, _ in results):
-            st.page_link("pages/3_📈_Visualiser.py", label="→ Go check the extracted curves", icon="📈")
+        affected_names = ui.get_names_with_existing_data(names, eluant, observation)
+        if affected_names:
+            confirm_overwrite_dialog(affected_names, files_info, names, length, front,
+                                      X_offset, Y_offset, inter_spot_dist, eluant, observation)
+        else:
+            run_extraction(files_info, names, length, front, X_offset, Y_offset, inter_spot_dist, eluant, observation)
