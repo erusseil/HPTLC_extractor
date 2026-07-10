@@ -142,30 +142,33 @@ with preview_col:
     if not condition_selected:
         st.warning("Select both the eluant and observation before extracting.")
 
-    uploader_label = (f"Upload PNG plate photo(s) for {eluant} / {observation}"
-                       if condition_selected else "Upload PNG plate photo(s)")
-    uploaded_files = st.file_uploader(uploader_label, type=["png"], accept_multiple_files=True)
+    # One photo at a time: extracting several photos together for the same
+    # condition would silently overwrite shared product names within the
+    # same batch, since the overwrite check below only looks at disk state
+    # from *before* this click, not at sibling files in the same upload.
+    uploader_label = (f"Upload a PNG plate photo for {eluant} / {observation}"
+                       if condition_selected else "Upload a PNG plate photo")
+    uploaded_file = st.file_uploader(uploader_label, type=["png"])
 
     files_info = []
-    if uploaded_files:
-        for uploaded_file in uploaded_files:
-            saved_path = os.path.join(IMAGE_PATH, uploaded_file.name)
-            with open(saved_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            files_info.append((uploaded_file.name, os.path.abspath(saved_path)))
+    if uploaded_file is not None:
+        saved_path = os.path.join(IMAGE_PATH, uploaded_file.name)
+        with open(saved_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        files_info.append((uploaded_file.name, os.path.abspath(saved_path)))
 
-            image = Image.open(saved_path)
-            try:
-                windows = hptlc.HPTLC_extracter.compute_spot_windows(
-                    (image.height, image.width), length, X_offset, Y_offset,
-                    front, inter_spot_dist, names,
-                )
-                st.image(draw_spot_overlay(image, windows),
-                         caption=f"{uploaded_file.name} — check the boxes line up with the spots",
-                         use_container_width=True)
-            except ValueError as e:
-                st.error(f"{uploaded_file.name}: {e}")
-                st.image(image, caption=uploaded_file.name, use_container_width=True)
+        image = Image.open(saved_path)
+        try:
+            windows = hptlc.HPTLC_extracter.compute_spot_windows(
+                (image.height, image.width), length, X_offset, Y_offset,
+                front, inter_spot_dist, names,
+            )
+            st.image(draw_spot_overlay(image, windows),
+                     caption=f"{uploaded_file.name} — check the boxes line up with the spots",
+                     use_container_width=True)
+        except ValueError as e:
+            st.error(f"{uploaded_file.name}: {e}")
+            st.image(image, caption=uploaded_file.name, use_container_width=True)
 
     can_extract = names_valid and bool(files_info) and condition_selected
     if st.button("🧪 Extract spectra", disabled=not can_extract, use_container_width=True):

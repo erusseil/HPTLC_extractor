@@ -75,20 +75,28 @@ def get_coverage():
 
 
 def get_names_with_existing_data(names, eluant, observation):
-    """Which of the given (non-bckg) names already have non-empty standard
-    data for this eluant/observation combo — used to warn before overwriting."""
+    """Which of the given (non-bckg) names already have non-empty raw or
+    standard data for this eluant/observation combo — used to warn before
+    overwriting. Checks both folders since extract_one_image writes raw
+    first, then standard, so a name can have one without the other if a
+    prior extraction failed partway through."""
     main_folder_path = hptlc.HPTLC_extracter.main_folder_path
     existing = []
     for name in names:
         if name == "bckg":
             continue
-        path = f"{main_folder_path}/standard/{name}.json"
-        if not os.path.isfile(path):
-            continue
-        with open(path, "r") as f:
-            data = json.load(f)
-        curve = data.get(eluant, {}).get(observation, {})
-        if curve and all(len(curve.get(c, [])) > 0 for c in ["R", "G", "B"]):
+        has_data = False
+        for folder in ("standard", "raw"):
+            path = f"{main_folder_path}/{folder}/{name}.json"
+            if not os.path.isfile(path):
+                continue
+            with open(path, "r") as f:
+                data = json.load(f)
+            curve = data.get(eluant, {}).get(observation, {})
+            if curve and all(len(curve.get(c, [])) > 0 for c in ["R", "G", "B"]):
+                has_data = True
+                break
+        if has_data:
             existing.append(name)
     return existing
 

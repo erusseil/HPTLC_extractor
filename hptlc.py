@@ -208,6 +208,12 @@ class HPTLC_extracter():
     @staticmethod
     def subsample(sample, nbins):
 
+        if len(sample) < nbins:
+            message = (f"Photo resolution too low to resample reliably: the extracted spot "
+                       f"window has only {len(sample)} rows, but {nbins} are needed. "
+                       f"Use a higher-resolution photo.")
+            raise ValueError(message)
+
         # Calculate the bin indices for each element
         bin_edges = np.linspace(0, len(sample) + 1, nbins)
         bin_indices = np.floor(np.linspace(0, nbins - 1, len(sample))).astype(int)

@@ -139,7 +139,7 @@ def build_graph(thresh):
     m = np.array(matrix)[:, 1:]
     m_contiunous = m.copy().astype(float)
 
-    link, nolink = m <= thresh, m > thresh
+    link, nolink = m <= thresh, (m > thresh) | np.isnan(m_contiunous)
     m[nolink] = 0
     m[link] = 1
     m = m.astype(int)
