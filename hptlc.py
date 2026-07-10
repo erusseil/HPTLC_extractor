@@ -14,6 +14,8 @@ class HPTLC_extracter():
     resolution = 500
     extra = 0.03 #Extra length to add top and bottom in percent of the migration length
     lam = 1e7 #Value used in the baseline fit
+    baseline_pad_fraction = 0.10 #Mirror-padding added on each side before fitting the baseline,
+                                  #to keep the fit stable near the edges; cropped off afterward.
 
     def __init__(self, names, length, front, X_offset, Y_offset, inter_spot_dist):
 
@@ -206,6 +208,21 @@ class HPTLC_extracter():
         return norm_sample
 
     @staticmethod
+    def get_pre_baseline_curve(sample, background, resolution):
+        """Background-subtracted + resampled curve, before baseline
+        correction. Used to visualize what the baseline step removes,
+        without touching the extraction/normalize pipeline itself."""
+
+        corrected = []
+        for i in range(3):
+            sub = sample[:, i]
+            bkg = background[:, i]
+            corrected.append(HPTLC_extracter.subsample(sub - bkg, resolution))
+
+        corrected = np.array(corrected).T
+        return corrected / np.max(np.abs(corrected))
+
+    @staticmethod
     def subsample(sample, nbins):
 
         # Calculate the bin indices for each element
@@ -228,25 +245,49 @@ class HPTLC_extracter():
 
         from pybaselines import Baseline
 
+        # Whittaker-smoother-style baseline fits (fabc included) have no
+        # information beyond the signal's edges, so the fit tends to become
+        # unstable exactly there. Mirror-pad before fitting and crop the
+        # padding back off afterward to keep the edges stable, without
+        # changing the output length or affecting the interior of the fit.
+        pad_width = max(1, int(len(sample) * HPTLC_extracter.baseline_pad_fraction))
+        padded_sample = np.pad(sample, pad_width, mode='reflect')
+
         baseline_fitter = Baseline()
-        baseline, _ = baseline_fitter.fabc(sample, lam=baseline_lam)
+        padded_baseline, _ = baseline_fitter.fabc(padded_sample, lam=baseline_lam)
+        baseline = padded_baseline[pad_width:-pad_width]
 
         #Shift for median to be at zero
         median = np.median(sample - baseline)
         return baseline - median
 
+    @staticmethod
+    def get_display_curve(name, elu, obs, baseline_removed=True):
+        """RGB arrays for display: either the final baseline-corrected
+        standard curve, or the background-subtracted-only curve computed
+        on the fly from raw/ (pre-baseline) — used by the Visualiser's
+        baseline-correction toggle."""
 
-def show_curve(path1, elu, obs, path2):
+        main_folder_path = HPTLC_extracter.main_folder_path
+
+        if baseline_removed:
+            with open(f"{main_folder_path}/standard/{name}.json", 'r') as f:
+                data = json.load(f)
+            curve = data[elu][obs]
+            return curve['R'], curve['G'], curve['B']
+
+        with open(f"{main_folder_path}/raw/{name}.json", 'r') as f:
+            data = json.load(f)
+        raw = data[elu][obs]
+        sample = np.array([raw['R'], raw['G'], raw['B']]).T
+        background = np.array([raw['background']['R'], raw['background']['G'], raw['background']['B']]).T
+        pre_baseline = HPTLC_extracter.get_pre_baseline_curve(sample, background, HPTLC_extracter.resolution)
+        return pre_baseline[:, 0], pre_baseline[:, 1], pre_baseline[:, 2]
+
+
+def show_curve(name1, elu, obs, name2=None, baseline_removed=True):
 
     import matplotlib.pyplot as plt
-
-
-    with open(path1, 'r') as openfile:
-        json_object = json.load(openfile)
-
-    if not "Nothing" in path2:
-        with open(path2, 'r') as openfile:
-            json_object2 = json.load(openfile)
 
     colors = ['#c4110e', '#24b00e', '#352db5']
     pastel_colors = ['#e86664', '#94d48a', '#a7a4db' ]
@@ -254,24 +295,15 @@ def show_curve(path1, elu, obs, path2):
 
     fig, ax = plt.subplots()
 
-    begin = path1[::-1].find("/")
-    end = path1.find(".json")
-    label = path1[-begin:end]
-    
+    curve1 = HPTLC_extracter.get_display_curve(name1, elu, obs, baseline_removed)
     for i in range(3):
-        curve = json_object[elu][obs][RGB[i]]
-        ax.plot(curve, color=colors[i], label=f"{label} ({RGB[i]})", alpha=0.8)
+        ax.plot(curve1[i], color=colors[i], label=f"{name1} ({RGB[i]})", alpha=0.8)
 
-    if not "Nothing" in path2:
-
-        begin2 = path2[::-1].find("/")
-        end2 = path2.find(".json")
-        label2 = path2[-begin2:end2]
-        
+    if name2:
+        curve2 = HPTLC_extracter.get_display_curve(name2, elu, obs, baseline_removed)
         for i in range(3):
-            curve2 = json_object2[elu][obs][RGB[i]]
-            ax.plot(curve2, color=pastel_colors[i], label=f"{label2} ({RGB[i]})", linestyle="dashed", alpha=1)        
-        
+            ax.plot(curve2[i], color=pastel_colors[i], label=f"{name2} ({RGB[i]})", linestyle="dashed", alpha=1)
+
     ax.legend()
 
     return fig
