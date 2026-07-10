@@ -9,7 +9,6 @@ import ui
 
 DISTANCES_PATH = f"{hptlc.HPTLC_extracter.main_folder_path}/distances/"
 
-st.set_page_config(page_title="Distances", page_icon="🕸️", layout="wide")
 ui.render_header(
     "Distances",
     icon="🕸️",

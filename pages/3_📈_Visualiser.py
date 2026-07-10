@@ -17,7 +17,6 @@ def file_selector(label, folder_path=STANDARD_PATH, with_null=False):
     return os.path.join(folder_path, selected_filename)
 
 
-st.set_page_config(page_title="Visualiser", page_icon="📈", layout="wide")
 ui.render_header(
     "Visualiser",
     icon="📈",

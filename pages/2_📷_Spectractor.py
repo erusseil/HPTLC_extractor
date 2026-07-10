@@ -9,7 +9,6 @@ import ui
 IMAGE_PATH = f"{hptlc.HPTLC_extracter.main_folder_path}/images/"
 os.makedirs(IMAGE_PATH, exist_ok=True)
 
-st.set_page_config(page_title="Spectractor", page_icon="📷", layout="wide")
 ui.render_header(
     "Spectractor",
     icon="📷",
