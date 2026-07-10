@@ -14,8 +14,12 @@ class HPTLC_extracter():
     resolution = 500
     extra = 0.03 #Extra length to add top and bottom in percent of the migration length
     lam = 1e7 #Value used in the baseline fit
-    baseline_pad_fraction = 0.10 #Mirror-padding added on each side before fitting the baseline,
-                                  #to keep the fit stable near the edges; cropped off afterward.
+    onset_noise_fraction = 0.10 #Leading fraction of the curve used to estimate the noise
+                                 #floor when detecting where the first real signal begins.
+    onset_threshold_sigma = 4 #How many standard deviations above the noise floor a point
+                               #must reach to count as the start of a real signal.
+    onset_min_consecutive = 3 #Number of consecutive points that must clear the threshold,
+                               #so a single noise spike doesn't get mistaken for signal onset.
 
     def __init__(self, names, length, front, X_offset, Y_offset, inter_spot_dist):
 
@@ -241,21 +245,44 @@ class HPTLC_extracter():
             raise ValueError(message)
 
     @staticmethod
+    def detect_signal_onset(sample):
+        """Index where a real signal first rises out of the noise.
+
+        The leading fraction of the curve is guaranteed to be compound-free
+        (the migration front hasn't reached it yet), so its variability is
+        a good estimate of pure noise. Onset is the first run of several
+        consecutive points that clears a threshold above that noise floor.
+        Returns 0 if no clear onset is found (nothing to force flat).
+        """
+        n = len(sample)
+        noise_len = max(5, int(n * HPTLC_extracter.onset_noise_fraction))
+        noise_region = sample[:noise_len]
+        noise_mean = np.mean(noise_region)
+        noise_std = np.std(noise_region)
+
+        threshold = noise_mean + HPTLC_extracter.onset_threshold_sigma * noise_std
+        above = sample > threshold
+
+        run = HPTLC_extracter.onset_min_consecutive
+        for i in range(len(above) - run + 1):
+            if above[i:i + run].all():
+                return i
+        return 0
+
+    @staticmethod
     def fit_baseline(sample, baseline_lam):
 
         from pybaselines import Baseline
 
-        # Whittaker-smoother-style baseline fits (fabc included) have no
-        # information beyond the signal's edges, so the fit tends to become
-        # unstable exactly there. Mirror-pad before fitting and crop the
-        # padding back off afterward to keep the edges stable, without
-        # changing the output length or affecting the interior of the fit.
-        pad_width = max(1, int(len(sample) * HPTLC_extracter.baseline_pad_fraction))
-        padded_sample = np.pad(sample, pad_width, mode='reflect')
-
         baseline_fitter = Baseline()
-        padded_baseline, _ = baseline_fitter.fabc(padded_sample, lam=baseline_lam)
-        baseline = padded_baseline[pad_width:-pad_width]
+        baseline, _ = baseline_fitter.fabc(sample, lam=baseline_lam)
+
+        # Nothing has migrated yet before the first real signal, so the
+        # curve (and therefore the baseline) must be flat there — force
+        # it flat instead of trusting the fit's behavior at that edge.
+        onset = HPTLC_extracter.detect_signal_onset(sample)
+        if onset > 0:
+            baseline[:onset] = baseline[onset]
 
         #Shift for median to be at zero
         median = np.median(sample - baseline)
