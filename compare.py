@@ -139,28 +139,37 @@ def build_graph(thresh):
     m = np.array(matrix)[:, 1:]
     m_contiunous = m.copy().astype(float)
 
-    link, nolink = (m<=thresh) & (m!=0), (m>thresh) | (m==thresh)
+    link, nolink = m <= thresh, m > thresh
     m[nolink] = 0
     m[link] = 1
     m = m.astype(int)
 
     G = nx.from_numpy_array(m)
 
-    edges, edge_weights = [], []
+    edges, distances = [], []
     # Iterate over the nodes and add weights from the distance matrix
     for i in list(G.nodes):
         for j in list(G[i]):
             if (m[i, j] != 0) & (i<j):  # Look only if there is an egde on all of the matrix (because it is symmetrical)
                 edges.append((i, j))
-                edge_weights.append(1/(m_contiunous[i, j]))  # Assign distance as edge weight
+                distances.append(m_contiunous[i, j])
 
-    if edge_weights == []:
+    if distances == []:
         return None, None, None, None
+
+    # A perfect match (distance 0) would divide by zero under 1/distance;
+    # give it a weight just above the strongest real (nonzero) match instead.
+    nonzero_distances = [d for d in distances if d > 0]
+    max_real_weight = 1 / min(nonzero_distances) if nonzero_distances else 1.0
+    edge_weights = [(1 / d) if d > 0 else max_real_weight * 1.1 for d in distances]
 
     # The scaling is temporary and a better one should be chosen once more data is available
     min_weight = min(edge_weights)
     max_weight = max(edge_weights)
-    scaled_weights = [0.5 + 5 * (weight - min_weight) / (max_weight - min_weight) for weight in edge_weights]
+    if max_weight == min_weight:
+        scaled_weights = [3.0 for _ in edge_weights]
+    else:
+        scaled_weights = [0.5 + 5 * (weight - min_weight) / (max_weight - min_weight) for weight in edge_weights]
 
     labels = dict(matrix['Unnamed: 0'])
     return G, labels, edges, scaled_weights
