@@ -38,8 +38,9 @@ with col1:
             )
 
     st.subheader("Similarity graph")
-    threshold = st.number_input(
+    threshold = st.slider(
         "Graph connection threshold", value=0.05, min_value=0.0, max_value=1.0, step=0.01,
+        format="%.2f",
         help="Samples with an average distance below this value are linked.",
     )
 

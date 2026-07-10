@@ -33,14 +33,15 @@ with col1:
     sample_name = os.path.basename(filename1)[:-5]
     coverage_row = coverage.loc[sample_name] if sample_name in coverage.index else None
 
-    eluant = st.selectbox("Eluant:", hptlc.HPTLC_extracter.standard_eluants)
+    eluant = st.selectbox("Eluant:", hptlc.HPTLC_extracter.standard_eluants, key="vis_eluant")
 
     def obs_label(obs):
         if coverage_row is not None and not coverage_row.get(f"{eluant}_{obs}", True):
             return f"{obs} (no data)"
         return obs
 
-    obs = st.selectbox("Observation:", hptlc.HPTLC_extracter.standard_observations, format_func=obs_label)
+    obs = st.selectbox("Observation:", hptlc.HPTLC_extracter.standard_observations,
+                        format_func=obs_label, key="vis_obs")
 
     if coverage_row is not None and not coverage_row.get(f"{eluant}_{obs}", True):
         st.info(f"No extracted data yet for **{sample_name}** under **{eluant} / {obs}** — the plot will be empty.")

@@ -201,6 +201,8 @@ class HPTLC_extracter():
                     with open(save_path, "w") as outfile:
                         outfile.write(json_dico)
 
+            return eluant, observation
+
         else:
             message = ("Invalid file name — it must contain both an eluant "
                        f"({', '.join(HPTLC_extracter.standard_eluants)}) and an observation "

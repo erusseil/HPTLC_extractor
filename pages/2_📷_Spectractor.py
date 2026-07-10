@@ -43,11 +43,13 @@ with settings_col:
     front = st.number_input("Front (mm)", value=settings["front"], min_value=0.0, step=1.0,
                              help="Distance from the spot line to the solvent front.")
     X_offset = st.number_input("X offset (mm)", value=settings["X_offset"], min_value=0.0, step=0.5,
+                                format="%.1f",
                                 help="Distance from the left edge of the plate to the center of the first spot.")
     Y_offset = st.number_input("Y offset (mm)", value=settings["Y_offset"], min_value=0.0, step=0.5,
+                                format="%.1f",
                                 help="Distance from the bottom edge of the plate to the center of the spots.")
     inter_spot_dist = st.number_input("Inter-spot distance (mm)", value=settings["inter_spot_dist"],
-                                       min_value=0.0, step=0.5)
+                                       min_value=0.0, step=0.5, format="%.1f")
 
     names_input = st.text_area(
         "Product names (comma-separated, in plate order)",
@@ -115,8 +117,10 @@ with preview_col:
         results = []
         for i, (filename, file_path) in enumerate(files_info):
             try:
-                extractor.extract_one_image(file_path)
+                eluant, observation = extractor.extract_one_image(file_path)
                 results.append((filename, True, ""))
+                st.session_state["vis_eluant"] = eluant
+                st.session_state["vis_obs"] = observation
             except Exception as e:
                 results.append((filename, False, str(e)))
             progress.progress((i + 1) / len(files_info), text=f"Extracted {filename} ({i + 1}/{len(files_info)})")
