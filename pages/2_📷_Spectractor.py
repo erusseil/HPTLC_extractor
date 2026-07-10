@@ -85,14 +85,23 @@ with settings_col:
 with preview_col:
     st.subheader("Upload & check alignment")
 
-    cond_cols = st.columns(2)
-    eluant = cond_cols[0].selectbox("Eluant used", hptlc.HPTLC_extracter.standard_eluants)
-    observation = cond_cols[1].selectbox("Observation", hptlc.HPTLC_extracter.standard_observations)
+    PICK_ONE = "— select —"
+    with st.container(border=True):
+        st.markdown("**🧭 Which condition is this upload for?**")
+        cond_cols = st.columns(2)
+        eluant_choice = cond_cols[0].selectbox("Eluant used", [PICK_ONE] + hptlc.HPTLC_extracter.standard_eluants)
+        obs_choice = cond_cols[1].selectbox("Observation", [PICK_ONE] + hptlc.HPTLC_extracter.standard_observations)
 
-    uploaded_files = st.file_uploader(
-        f"Upload PNG plate photo(s) for {eluant} / {observation}",
-        type=["png"], accept_multiple_files=True,
-    )
+    eluant = None if eluant_choice == PICK_ONE else eluant_choice
+    observation = None if obs_choice == PICK_ONE else obs_choice
+    condition_selected = eluant is not None and observation is not None
+
+    if not condition_selected:
+        st.warning("Select both the eluant and observation before extracting.")
+
+    uploader_label = (f"Upload PNG plate photo(s) for {eluant} / {observation}"
+                       if condition_selected else "Upload PNG plate photo(s)")
+    uploaded_files = st.file_uploader(uploader_label, type=["png"], accept_multiple_files=True)
 
     files_info = []
     if uploaded_files:
@@ -115,7 +124,7 @@ with preview_col:
                 st.error(f"{uploaded_file.name}: {e}")
                 st.image(image, caption=uploaded_file.name, use_container_width=True)
 
-    can_extract = names_valid and bool(files_info)
+    can_extract = names_valid and bool(files_info) and condition_selected
     if st.button("🧪 Extract spectra", disabled=not can_extract, use_container_width=True):
         extractor = hptlc.HPTLC_extracter(names, length, front, X_offset, Y_offset, inter_spot_dist)
         progress = st.progress(0.0, text="Starting extraction...")
