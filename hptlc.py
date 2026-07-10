@@ -14,8 +14,10 @@ class HPTLC_extracter():
     resolution = 500
     extra = 0.03 #Extra length to add top and bottom in percent of the migration length
     lam = 1e7 #Value used in the baseline fit
-    onset_noise_fraction = 0.10 #Leading fraction of the curve used to estimate the noise
+    onset_noise_fraction = 0.03 #Leading fraction of the curve used to estimate the noise
                                  #floor when detecting where the first real signal begins.
+                                 #Kept small (matching the `extra` margin) so a genuine early
+                                 #peak doesn't get folded into the noise estimate itself.
     onset_threshold_sigma = 4 #How many standard deviations above the noise floor a point
                                #must reach to count as the start of a real signal.
     onset_min_consecutive = 3 #Number of consecutive points that must clear the threshold,
