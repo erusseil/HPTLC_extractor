@@ -282,9 +282,14 @@ class HPTLC_extracter():
         # Nothing has migrated yet before the first real signal, so the
         # curve (and therefore the baseline) must be flat there — force
         # it flat instead of trusting the fit's behavior at that edge.
+        # Use the signal's own median over that region as the flat value,
+        # not the fit's value right at the boundary: fabc's spline eases
+        # into a nearby steep rise smoothly rather than with a sharp
+        # corner, so baseline[onset] can already be pulled well above the
+        # true flat level by the peak starting right after it.
         onset = HPTLC_extracter.detect_signal_onset(sample)
         if onset > 0:
-            baseline[:onset] = baseline[onset]
+            baseline[:onset] = np.median(sample[:onset])
 
         #Shift for median to be at zero
         median = np.median(sample - baseline)
