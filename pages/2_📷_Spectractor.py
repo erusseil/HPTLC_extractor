@@ -119,8 +119,9 @@ with preview_col:
             try:
                 eluant, observation = extractor.extract_one_image(file_path)
                 results.append((filename, True, ""))
-                st.session_state["vis_eluant"] = eluant
-                st.session_state["vis_obs"] = observation
+                st.session_state["last_extracted_eluant"] = eluant
+                st.session_state["last_extracted_obs"] = observation
+                st.session_state["extract_nonce"] = st.session_state.get("extract_nonce", 0) + 1
             except Exception as e:
                 results.append((filename, False, str(e)))
             progress.progress((i + 1) / len(files_info), text=f"Extracted {filename} ({i + 1}/{len(files_info)})")
