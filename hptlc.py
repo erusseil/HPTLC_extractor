@@ -14,6 +14,14 @@ class HPTLC_extracter():
     resolution = 500
     extra = 0.03 #Extra length to add top and bottom in percent of the migration length
     lam = 1e7 #Value used in the baseline fit
+    onset_noise_fraction = 0.03 #Leading fraction of the curve used to estimate the noise
+                                 #floor when detecting where the first real signal begins.
+                                 #Kept small (matching the `extra` margin) so a genuine early
+                                 #peak doesn't get folded into the noise estimate itself.
+    onset_threshold_sigma = 4 #How many standard deviations above the noise floor a point
+                               #must reach to count as the start of a real signal.
+    onset_min_consecutive = 3 #Number of consecutive points that must clear the threshold,
+                               #so a single noise spike doesn't get mistaken for signal onset.
 
     def __init__(self, names, length, front, X_offset, Y_offset, inter_spot_dist):
 
@@ -206,6 +214,21 @@ class HPTLC_extracter():
         return norm_sample
 
     @staticmethod
+    def get_pre_baseline_curve(sample, background, resolution):
+        """Background-subtracted + resampled curve, before baseline
+        correction. Used to visualize what the baseline step removes,
+        without touching the extraction/normalize pipeline itself."""
+
+        corrected = []
+        for i in range(3):
+            sub = sample[:, i]
+            bkg = background[:, i]
+            corrected.append(HPTLC_extracter.subsample(sub - bkg, resolution))
+
+        corrected = np.array(corrected).T
+        return corrected / np.max(np.abs(corrected))
+
+    @staticmethod
     def subsample(sample, nbins):
 
         if len(sample) < nbins:
@@ -230,6 +253,31 @@ class HPTLC_extracter():
             raise ValueError(message)
 
     @staticmethod
+    def detect_signal_onset(sample):
+        """Index where a real signal first rises out of the noise.
+
+        The leading fraction of the curve is guaranteed to be compound-free
+        (the migration front hasn't reached it yet), so its variability is
+        a good estimate of pure noise. Onset is the first run of several
+        consecutive points that clears a threshold above that noise floor.
+        Returns 0 if no clear onset is found (nothing to force flat).
+        """
+        n = len(sample)
+        noise_len = max(5, int(n * HPTLC_extracter.onset_noise_fraction))
+        noise_region = sample[:noise_len]
+        noise_mean = np.mean(noise_region)
+        noise_std = np.std(noise_region)
+
+        threshold = noise_mean + HPTLC_extracter.onset_threshold_sigma * noise_std
+        above = sample > threshold
+
+        run = HPTLC_extracter.onset_min_consecutive
+        for i in range(len(above) - run + 1):
+            if above[i:i + run].all():
+                return i
+        return 0
+
+    @staticmethod
     def fit_baseline(sample, baseline_lam):
 
         from pybaselines import Baseline
@@ -237,22 +285,49 @@ class HPTLC_extracter():
         baseline_fitter = Baseline()
         baseline, _ = baseline_fitter.fabc(sample, lam=baseline_lam)
 
+        # Nothing has migrated yet before the first real signal, so the
+        # curve (and therefore the baseline) must be flat there — force
+        # it flat instead of trusting the fit's behavior at that edge.
+        # Use the signal's own median over that region as the flat value,
+        # not the fit's value right at the boundary: fabc's spline eases
+        # into a nearby steep rise smoothly rather than with a sharp
+        # corner, so baseline[onset] can already be pulled well above the
+        # true flat level by the peak starting right after it.
+        onset = HPTLC_extracter.detect_signal_onset(sample)
+        if onset > 0:
+            baseline[:onset] = np.median(sample[:onset])
+
         #Shift for median to be at zero
         median = np.median(sample - baseline)
         return baseline - median
 
+    @staticmethod
+    def get_display_curve(name, elu, obs, baseline_removed=True):
+        """RGB arrays for display: either the final baseline-corrected
+        standard curve, or the background-subtracted-only curve computed
+        on the fly from raw/ (pre-baseline) — used by the Visualiser's
+        baseline-correction toggle."""
 
-def show_curve(path1, elu, obs, path2):
+        main_folder_path = HPTLC_extracter.main_folder_path
+
+        if baseline_removed:
+            with open(f"{main_folder_path}/standard/{name}.json", 'r') as f:
+                data = json.load(f)
+            curve = data[elu][obs]
+            return curve['R'], curve['G'], curve['B']
+
+        with open(f"{main_folder_path}/raw/{name}.json", 'r') as f:
+            data = json.load(f)
+        raw = data[elu][obs]
+        sample = np.array([raw['R'], raw['G'], raw['B']]).T
+        background = np.array([raw['background']['R'], raw['background']['G'], raw['background']['B']]).T
+        pre_baseline = HPTLC_extracter.get_pre_baseline_curve(sample, background, HPTLC_extracter.resolution)
+        return pre_baseline[:, 0], pre_baseline[:, 1], pre_baseline[:, 2]
+
+
+def show_curve(name1, elu, obs, name2=None, baseline_removed=True):
 
     import matplotlib.pyplot as plt
-
-
-    with open(path1, 'r') as openfile:
-        json_object = json.load(openfile)
-
-    if not "Nothing" in path2:
-        with open(path2, 'r') as openfile:
-            json_object2 = json.load(openfile)
 
     colors = ['#c4110e', '#24b00e', '#352db5']
     pastel_colors = ['#e86664', '#94d48a', '#a7a4db' ]
@@ -260,24 +335,15 @@ def show_curve(path1, elu, obs, path2):
 
     fig, ax = plt.subplots()
 
-    begin = path1[::-1].find("/")
-    end = path1.find(".json")
-    label = path1[-begin:end]
-    
+    curve1 = HPTLC_extracter.get_display_curve(name1, elu, obs, baseline_removed)
     for i in range(3):
-        curve = json_object[elu][obs][RGB[i]]
-        ax.plot(curve, color=colors[i], label=f"{label} ({RGB[i]})", alpha=0.8)
+        ax.plot(curve1[i], color=colors[i], label=f"{name1} ({RGB[i]})", alpha=0.8)
 
-    if not "Nothing" in path2:
-
-        begin2 = path2[::-1].find("/")
-        end2 = path2.find(".json")
-        label2 = path2[-begin2:end2]
-        
+    if name2:
+        curve2 = HPTLC_extracter.get_display_curve(name2, elu, obs, baseline_removed)
         for i in range(3):
-            curve2 = json_object2[elu][obs][RGB[i]]
-            ax.plot(curve2, color=pastel_colors[i], label=f"{label2} ({RGB[i]})", linestyle="dashed", alpha=1)        
-        
+            ax.plot(curve2[i], color=pastel_colors[i], label=f"{name2} ({RGB[i]})", linestyle="dashed", alpha=1)
+
     ax.legend()
 
     return fig

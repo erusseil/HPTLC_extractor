@@ -9,12 +9,11 @@ STANDARD_PATH = f"{hptlc.HPTLC_extracter.main_folder_path}/standard/"
 
 
 def file_selector(label, folder_path=STANDARD_PATH, with_null=False):
-    filenames = [f for f in os.listdir(folder_path) if f.endswith(".json")]
+    filenames = [f[:-5] for f in os.listdir(folder_path) if f.endswith(".json")]
     filenames.sort()
     if with_null:
         filenames = ["Nothing"] + filenames
-    selected_filename = st.selectbox(label, filenames)
-    return os.path.join(folder_path, selected_filename)
+    return st.selectbox(label, filenames)
 
 
 ui.render_header(
@@ -28,8 +27,7 @@ coverage = ui.get_coverage()
 col1, col2 = st.columns(2)
 
 with col1:
-    filename1 = file_selector("Show molecule:")
-    sample_name = os.path.basename(filename1)[:-5]
+    sample_name = file_selector("Show molecule:")
     coverage_row = coverage.loc[sample_name] if sample_name in coverage.index else None
 
     # Keyed on the extraction nonce so a fresh extraction forces these
@@ -59,6 +57,20 @@ with col1:
         st.info(f"No extracted data yet for **{sample_name}** under **{eluant} / {obs}** — the plot will be empty.")
 
     col1.divider()
-    filename2 = file_selector("Compare with:", with_null=True)
+    compare_name = file_selector("Compare with:", with_null=True)
+    name2 = None if compare_name == "Nothing" else compare_name
 
-col2.pyplot(hptlc.show_curve(filename1, eluant, obs, path2=filename2), use_container_width=True)
+with col2:
+    # Read before rendering the plot so the toggle can be placed below it
+    # while still reflecting the current click on this same render.
+    baseline_key = "vis_baseline_removed"
+    baseline_removed = st.session_state.get(baseline_key, True)
+
+    fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2, baseline_removed=baseline_removed)
+    st.pyplot(fig, use_container_width=True)
+
+    st.toggle(
+        "Baseline-corrected", value=baseline_removed, key=baseline_key,
+        help="Turn off to see the curve as background-subtracted only, before baseline "
+             "removal — useful for judging how well the correction is working.",
+    )
