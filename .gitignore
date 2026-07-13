@@ -1,0 +1,8 @@
+# The local database: created automatically the first time the app runs,
+# grows with every sample you extract. Never shipped via git — clone the
+# repo and you start with an empty database (see example_data/ to try it).
+HPTLC_data/
+
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
