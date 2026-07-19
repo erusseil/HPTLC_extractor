@@ -325,19 +325,45 @@ class HPTLC_extracter():
         return pre_baseline[:, 0], pre_baseline[:, 1], pre_baseline[:, 2]
 
 
-def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None):
+CHANNEL_CHOICES = ["RGB", "R", "G", "B", "Luminance"]
+
+_CHANNEL_COLORS = {"R": '#c4110e', "G": '#24b00e', "B": '#352db5', "Luminance": '#1F2937'}
+_CHANNEL_PASTELS = {"R": '#e86664', "G": '#94d48a', "B": '#a7a4db', "Luminance": '#9CA3AF'}
+
+
+def _channel_value(curve, label):
+    """curve is an (R, G, B) triple (lists or arrays); returns the array for
+    one plotted line. Luminance is the unweighted average of the three —
+    R, G and B are already comparable normalized intensities, not display
+    gamma values, so a plain average is the right "how much signal overall"
+    proxy rather than a perceptual luma formula."""
+    r, g, b = (np.asarray(curve[0]), np.asarray(curve[1]), np.asarray(curve[2]))
+    if label == "R":
+        return r
+    if label == "G":
+        return g
+    if label == "B":
+        return b
+    if label == "Luminance":
+        return (r + g + b) / 3
+    raise ValueError(f"Unknown channel: {label}")
+
+
+def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None, channels="RGB"):
     """aligned_curves, if given, is the {name: {"R", "G", "B", ...}} dict
     from compare.get_alignment() — samples present in it are plotted with
     their migration-axis correction applied instead of the raw standard
     curve, so the alignment used for distances can be sanity-checked
     visually. Samples not in it (e.g. no data for this combo) fall back to
-    the normal display curve."""
+    the normal display curve.
+
+    channels selects what to plot: "RGB" for all three channels, "R"/"G"/"B"
+    for a single one, or "Luminance" for their unweighted average.
+    """
 
     import matplotlib.pyplot as plt
 
-    colors = ['#c4110e', '#24b00e', '#352db5']
-    pastel_colors = ['#e86664', '#94d48a', '#a7a4db' ]
-    RGB = ['R', 'G', 'B']
+    labels = ["R", "G", "B"] if channels == "RGB" else [channels]
 
     def get_curve(name):
         if aligned_curves and name in aligned_curves:
@@ -345,17 +371,38 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
             return c['R'], c['G'], c['B']
         return HPTLC_extracter.get_display_curve(name, elu, obs, baseline_removed)
 
+    curve1 = get_curve(name1)
+    curve2 = get_curve(name2) if name2 else None
+
     fig, ax = plt.subplots()
 
-    curve1 = get_curve(name1)
-    for i in range(3):
-        ax.plot(curve1[i], color=colors[i], label=f"{name1} ({RGB[i]})", alpha=0.8)
+    # Scale from what the full RGB view would show for the sample(s)
+    # actually on screen — plot all three reference channels first, let
+    # matplotlib autoscale to them, capture that range, then discard these
+    # lines and draw the channel(s) actually requested. That way a single
+    # flat channel still reads as flat relative to this sample's (or this
+    # comparison's) own real dynamic range, rather than autoscaling to
+    # whatever tiny noise happens to be on screen — and a comparison against
+    # a second sample gets its own range, since both curves feed the autoscale.
+    reference_lines = [ax.plot(_channel_value(curve1, label))[0] for label in ["R", "G", "B"]]
+    if curve2 is not None:
+        reference_lines += [ax.plot(_channel_value(curve2, label))[0] for label in ["R", "G", "B"]]
+    ax.relim()
+    ax.autoscale_view()
+    ylim = ax.get_ylim()
+    for line in reference_lines:
+        line.remove()
 
-    if name2:
-        curve2 = get_curve(name2)
-        for i in range(3):
-            ax.plot(curve2[i], color=pastel_colors[i], label=f"{name2} ({RGB[i]})", linestyle="dashed", alpha=1)
+    for label in labels:
+        ax.plot(_channel_value(curve1, label), color=_CHANNEL_COLORS[label],
+                 label=f"{name1} ({label})", alpha=0.8)
 
+    if curve2 is not None:
+        for label in labels:
+            ax.plot(_channel_value(curve2, label), color=_CHANNEL_PASTELS[label],
+                     label=f"{name2} ({label})", linestyle="dashed", alpha=1)
+
+    ax.set_ylim(ylim)
     ax.legend()
 
     return fig

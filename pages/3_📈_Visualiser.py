@@ -62,6 +62,9 @@ with col1:
     name2 = None if compare_name == "Nothing" else compare_name
 
 with col2:
+    channels = st.selectbox("Channel(s) to plot:", hptlc.CHANNEL_CHOICES,
+                             help="Luminance is the unweighted average of R, G and B.")
+
     # Read before rendering the plot so the toggles can be placed below it
     # while still reflecting the current click on this same render.
     baseline_key = "vis_baseline_removed"
@@ -72,8 +75,8 @@ with col2:
 
     aligned_curves = compare.get_alignment(eluant, obs) if show_alignment else None
 
-    fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2,
-                            baseline_removed=baseline_removed, aligned_curves=aligned_curves)
+    fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2, baseline_removed=baseline_removed,
+                            aligned_curves=aligned_curves, channels=channels)
     st.pyplot(fig, use_container_width=True)
 
     if show_alignment:
