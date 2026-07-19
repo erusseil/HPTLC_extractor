@@ -5,6 +5,7 @@ import os
 import hptlc
 import skfda
 from skfda.preprocessing.dim_reduction import FPCA
+from skfda.preprocessing.registration import LeastSquaresShiftRegistration
 import math
 
 n_components = 5
@@ -38,6 +39,30 @@ def create_feature_tables():
             empty.to_csv(f"{main_folder_path}/features/{file}.csv", index=False)
 
 
+def align_channels(r, g, b, grid_points):
+    """Shift each sample's R/G/B curves by one shared, per-sample translation
+    along the migration axis, so an uneven solvent front (which shifts the
+    whole spectrum, not just one channel) doesn't get mistaken for a
+    different compound by the FPCA/distance steps downstream.
+
+    The shift is estimated from the combined (R+G+B) signal — using all
+    three channels' information rather than picking one arbitrarily — then
+    applied identically to each channel. Translation only: curves are never
+    stretched or compressed, and points that shift past the original edge of
+    the curve are filled with that edge's own value rather than extrapolated.
+    """
+    combined_fd = skfda.FDataGrid(data_matrix=r + g + b, grid_points=grid_points,
+                                   extrapolation="bounds")
+    shift_registration = LeastSquaresShiftRegistration(extrapolation="bounds")
+    shift_registration.fit_transform(combined_fd)
+    deltas = shift_registration.deltas_
+
+    rgb_fd = skfda.FDataGrid(data_matrix=np.stack([r, g, b], axis=-1), grid_points=grid_points,
+                              extrapolation="bounds")
+    aligned = rgb_fd.shift(deltas, extrapolation="bounds").data_matrix
+    return aligned[:, :, 0], aligned[:, :, 1], aligned[:, :, 2]
+
+
 def update_fpca(elu, obs):
 
     # Create new tables in case a new molecule was added
@@ -50,12 +75,18 @@ def update_fpca(elu, obs):
         curve = pd.read_json(f"{main_folder_path}/standard/{file}")[elu][obs]
         empty = [len(curve[col])==0 for col in ["R", "G", "B"]]
         if not any(empty):
-            all_curves.append(curve['R']+curve['G']+curve['B'])
+            all_curves.append((np.array(curve['R']), np.array(curve['G']), np.array(curve['B'])))
             included_files.append(name)
 
-    data_matrix = np.array(all_curves)
+    if len(all_curves) > 0:
 
-    if np.size(data_matrix)>0:
+        grid_points = np.linspace(0, 1, len(all_curves[0][0]))
+        r = np.array([c[0] for c in all_curves])
+        g = np.array([c[1] for c in all_curves])
+        b = np.array([c[2] for c in all_curves])
+        r, g, b = align_channels(r, g, b, grid_points)
+
+        data_matrix = np.concatenate([r, g, b], axis=1)
 
         fd = skfda.representation.grid.FDataGrid(
             data_matrix=data_matrix,
