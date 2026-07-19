@@ -39,51 +39,91 @@ def create_feature_tables():
             empty.to_csv(f"{main_folder_path}/features/{file}.csv", index=False)
 
 
-def align_channels(r, g, b, grid_points):
-    """Shift each sample's R/G/B curves by one shared, per-sample translation
-    along the migration axis, so an uneven solvent front (which shifts the
-    whole spectrum, not just one channel) doesn't get mistaken for a
-    different compound by the FPCA/distance steps downstream.
+def load_standard_curves(elu, obs):
+    """Every sample's (R, G, B) standard curves for one combo that actually
+    have data for it — the population used both to fit distances and to
+    check alignment against."""
+    files, no_extension_files = get_file_names()
 
-    The shift is estimated from the combined (R+G+B) signal — using all
-    three channels' information rather than picking one arbitrarily — then
-    applied identically to each channel. Translation only: curves are never
-    stretched or compressed, and points that shift past the original edge of
-    the curve are filled with that edge's own value rather than extrapolated.
+    names, all_r, all_g, all_b = [], [], [], []
+    for file, name in zip(files, no_extension_files):
+        curve = pd.read_json(f"{main_folder_path}/standard/{file}")[elu][obs]
+        if all(len(curve[c]) > 0 for c in ["R", "G", "B"]):
+            names.append(name)
+            all_r.append(curve['R'])
+            all_g.append(curve['G'])
+            all_b.append(curve['B'])
+
+    return names, np.array(all_r), np.array(all_g), np.array(all_b)
+
+
+def compute_shifts(r, g, b, grid_points):
+    """Per-sample translation (in the curve's normalized [0, 1] domain) that
+    best aligns the combined R+G+B signal to the population's mean.
+
+    Estimated from the combined signal — using all three channels' info
+    rather than picking one arbitrarily — since the shift itself is a single
+    physical migration-distance offset shared by all three.
     """
     combined_fd = skfda.FDataGrid(data_matrix=r + g + b, grid_points=grid_points,
                                    extrapolation="bounds")
     shift_registration = LeastSquaresShiftRegistration(extrapolation="bounds")
     shift_registration.fit_transform(combined_fd)
-    deltas = shift_registration.deltas_
+    return shift_registration.deltas_
 
+
+def apply_shifts(r, g, b, grid_points, deltas):
+    """Translate each channel by its sample's shift. Translation only —
+    curves are never stretched or compressed — and points that shift past
+    the original edge are filled with that edge's own value rather than
+    extrapolated.
+    """
     rgb_fd = skfda.FDataGrid(data_matrix=np.stack([r, g, b], axis=-1), grid_points=grid_points,
                               extrapolation="bounds")
     aligned = rgb_fd.shift(deltas, extrapolation="bounds").data_matrix
     return aligned[:, :, 0], aligned[:, :, 1], aligned[:, :, 2]
 
 
+def align_channels(r, g, b, grid_points):
+    """Shift each sample's R/G/B curves by one shared, per-sample translation
+    along the migration axis, so an uneven solvent front (which shifts the
+    whole spectrum, not just one channel) doesn't get mistaken for a
+    different compound by the FPCA/distance steps downstream.
+    """
+    deltas = compute_shifts(r, g, b, grid_points)
+    return apply_shifts(r, g, b, grid_points, deltas)
+
+
+def get_alignment(elu, obs):
+    """Per-sample shift and aligned curves for one combo, computed exactly
+    as `update_fpca` does it — lets the Visualiser show what the
+    migration-axis correction actually did, for sanity-checking.
+
+    Returns a dict keyed by sample name, or {} if no sample has data yet.
+    """
+    names, r, g, b = load_standard_curves(elu, obs)
+    if not names:
+        return {}
+
+    grid_points = np.linspace(0, 1, r.shape[1])
+    deltas = compute_shifts(r, g, b, grid_points)
+    r_aligned, g_aligned, b_aligned = apply_shifts(r, g, b, grid_points, deltas)
+
+    return {
+        name: {"delta": deltas[i], "R": r_aligned[i], "G": g_aligned[i], "B": b_aligned[i]}
+        for i, name in enumerate(names)
+    }
+
+
 def update_fpca(elu, obs):
 
     # Create new tables in case a new molecule was added
     create_feature_tables()
-    files, no_extension_files = get_file_names()
+    included_files, r, g, b = load_standard_curves(elu, obs)
 
-    all_curves = []
-    included_files = []
-    for file, name in zip(files, no_extension_files):
-        curve = pd.read_json(f"{main_folder_path}/standard/{file}")[elu][obs]
-        empty = [len(curve[col])==0 for col in ["R", "G", "B"]]
-        if not any(empty):
-            all_curves.append((np.array(curve['R']), np.array(curve['G']), np.array(curve['B'])))
-            included_files.append(name)
+    if len(included_files) > 0:
 
-    if len(all_curves) > 0:
-
-        grid_points = np.linspace(0, 1, len(all_curves[0][0]))
-        r = np.array([c[0] for c in all_curves])
-        g = np.array([c[1] for c in all_curves])
-        b = np.array([c[2] for c in all_curves])
+        grid_points = np.linspace(0, 1, r.shape[1])
         r, g, b = align_channels(r, g, b, grid_points)
 
         data_matrix = np.concatenate([r, g, b], axis=1)

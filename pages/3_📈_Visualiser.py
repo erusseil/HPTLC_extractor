@@ -2,6 +2,7 @@ import os
 
 import streamlit as st
 
+import compare
 import hptlc
 import ui
 
@@ -61,16 +62,42 @@ with col1:
     name2 = None if compare_name == "Nothing" else compare_name
 
 with col2:
-    # Read before rendering the plot so the toggle can be placed below it
+    # Read before rendering the plot so the toggles can be placed below it
     # while still reflecting the current click on this same render.
     baseline_key = "vis_baseline_removed"
     baseline_removed = st.session_state.get(baseline_key, True)
 
-    fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2, baseline_removed=baseline_removed)
+    alignment_key = "vis_show_alignment"
+    show_alignment = baseline_removed and st.session_state.get(alignment_key, False)
+
+    aligned_curves = compare.get_alignment(eluant, obs) if show_alignment else None
+
+    fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2,
+                            baseline_removed=baseline_removed, aligned_curves=aligned_curves)
     st.pyplot(fig, use_container_width=True)
+
+    if show_alignment:
+        shown = [n for n in (sample_name, name2) if n and aligned_curves and n in aligned_curves]
+        if shown:
+            deltas = " · ".join(f"{n}: {aligned_curves[n]['delta']:+.4f}" for n in shown)
+            st.caption(
+                f"Migration-axis shift applied — {deltas} (translation over the curve's "
+                "normalized [0, 1] domain; positive = shifted later). Recomputed from the "
+                "current database, same as when distances are recomputed."
+            )
+        else:
+            st.caption("No alignment to show — the selected sample(s) have no data for this combo.")
 
     st.toggle(
         "Baseline-corrected", value=baseline_removed, key=baseline_key,
         help="Turn off to see the curve as background-subtracted only, before baseline "
              "removal — useful for judging how well the correction is working.",
+    )
+    st.toggle(
+        "Show migration-axis alignment", value=show_alignment, key=alignment_key,
+        disabled=not baseline_removed,
+        help="Show the curves after the same shift-only alignment used when computing "
+             "distances, so you can check the correction against the raw curves above. "
+             "Only available on baseline-corrected curves, since that's what distances "
+             "are computed from.",
     )

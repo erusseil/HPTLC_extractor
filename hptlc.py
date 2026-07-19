@@ -325,7 +325,13 @@ class HPTLC_extracter():
         return pre_baseline[:, 0], pre_baseline[:, 1], pre_baseline[:, 2]
 
 
-def show_curve(name1, elu, obs, name2=None, baseline_removed=True):
+def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None):
+    """aligned_curves, if given, is the {name: {"R", "G", "B", ...}} dict
+    from compare.get_alignment() — samples present in it are plotted with
+    their migration-axis correction applied instead of the raw standard
+    curve, so the alignment used for distances can be sanity-checked
+    visually. Samples not in it (e.g. no data for this combo) fall back to
+    the normal display curve."""
 
     import matplotlib.pyplot as plt
 
@@ -333,14 +339,20 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True):
     pastel_colors = ['#e86664', '#94d48a', '#a7a4db' ]
     RGB = ['R', 'G', 'B']
 
+    def get_curve(name):
+        if aligned_curves and name in aligned_curves:
+            c = aligned_curves[name]
+            return c['R'], c['G'], c['B']
+        return HPTLC_extracter.get_display_curve(name, elu, obs, baseline_removed)
+
     fig, ax = plt.subplots()
 
-    curve1 = HPTLC_extracter.get_display_curve(name1, elu, obs, baseline_removed)
+    curve1 = get_curve(name1)
     for i in range(3):
         ax.plot(curve1[i], color=colors[i], label=f"{name1} ({RGB[i]})", alpha=0.8)
 
     if name2:
-        curve2 = HPTLC_extracter.get_display_curve(name2, elu, obs, baseline_removed)
+        curve2 = get_curve(name2)
         for i in range(3):
             ax.plot(curve2[i], color=pastel_colors[i], label=f"{name2} ({RGB[i]})", linestyle="dashed", alpha=1)
 
