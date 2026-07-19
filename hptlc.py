@@ -474,6 +474,8 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
     for band_ax, (name, band) in zip(band_axes, bands):
         band_ax.imshow(band, aspect="auto", extent=[0, band.shape[1], 0, 1])
         band_ax.set_yticks([])
-        band_ax.set_ylabel(name, rotation=0, ha="right", va="center", fontsize=9)
+        # Title, not a y-label: a long sample name would otherwise get
+        # squeezed into the narrow left margin next to the band.
+        band_ax.set_title(name, loc="left", fontsize=9, pad=2)
 
     return fig
