@@ -131,24 +131,64 @@ class HPTLC_extracter():
         bckg_arg = np.where(np.array(names) == 'bckg')[0][0]
 
         all_samples = []
+        all_rectangles = []
         for n, window in enumerate(windows):
             rectangle = image[window["bottom"]:window["top"]:-1, window["left"]:window["right"], :3]
             averaged = np.mean(rectangle, axis=1)
 
             if n != bckg_arg:
                 all_samples.append(averaged)
+                all_rectangles.append(rectangle)
 
             else:
                 bckg = averaged
 
-        return np.array(all_samples), bckg
+        return np.array(all_samples), bckg, all_rectangles
+
+
+    @staticmethod
+    def save_spot_band(name, rectangle, eluant, observation):
+        """Save the raw pixel rectangle a sample's curve was averaged from,
+        as a small true-color image — lets chemists see the actual
+        photographed spot behind a curve, for sanity-checking the
+        extraction itself rather than just trusting the numbers.
+
+        Resized so its length matches `resolution` (the curve's own point
+        count) and transposed so migration runs left-to-right, matching how
+        the curve is plotted above it. Always the raw crop: unaffected by
+        the baseline correction or migration-axis alignment applied to the
+        numeric curve, since it's a record of what was actually photographed.
+        """
+        from PIL import Image
+
+        band_dir = f"{HPTLC_extracter.main_folder_path}/images/bands/{name}"
+        os.makedirs(band_dir, exist_ok=True)
+
+        # rectangle is (migration, spot width, 3); swap so migration becomes
+        # the horizontal (PIL "width") axis instead of the vertical one.
+        transposed = np.transpose(rectangle, (1, 0, 2)).astype(np.uint8)
+        band = Image.fromarray(transposed).resize(
+            (HPTLC_extracter.resolution, transposed.shape[0]), Image.BILINEAR,
+        )
+        band.save(f"{band_dir}/{eluant}_{observation}.png")
+
+    @staticmethod
+    def get_spot_band(name, eluant, observation):
+        """The saved band for this sample/combo as an RGB array, or None if
+        it hasn't been extracted yet (e.g. it predates this feature)."""
+        from PIL import Image
+
+        path = f"{HPTLC_extracter.main_folder_path}/images/bands/{name}/{eluant}_{observation}.png"
+        if not os.path.isfile(path):
+            return None
+        return np.array(Image.open(path))
 
 
     def extract_one_image(self, image_path, eluant, observation):
 
         self.create_product_folder()
 
-        all_sample, bckg = self.convert_image_to_array(image_path, self.length,
+        all_sample, bckg, all_rectangles = self.convert_image_to_array(image_path, self.length,
                                                  self.X_offset, self.Y_offset,
                                                  self.front, self.inter_spot_dist,
                                                  self.names)
@@ -158,6 +198,7 @@ class HPTLC_extracter():
         for k in range(len(self.names)):
             if self.names[k] != 'bckg':
                 sample = all_sample[idx]
+                self.save_spot_band(self.names[k], all_rectangles[idx], eluant, observation)
                 save_path = f"{self.main_folder_path}/raw/{self.names[k]}.json"
                 idx += 1
 
@@ -349,7 +390,8 @@ def _channel_value(curve, label):
     raise ValueError(f"Unknown channel: {label}")
 
 
-def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None, channels="RGB"):
+def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None, channels="RGB",
+               show_bands=False):
     """aligned_curves, if given, is the {name: {"R", "G", "B", ...}} dict
     from compare.get_alignment() — samples present in it are plotted with
     their migration-axis correction applied instead of the raw standard
@@ -359,6 +401,11 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
 
     channels selects what to plot: "RGB" for all three channels, "R"/"G"/"B"
     for a single one, or "Luminance" for their unweighted average.
+
+    show_bands adds a row below the curve for each shown sample with a saved
+    extraction band (see HPTLC_extracter.save_spot_band) — the actual
+    photographed strip the curve was averaged from, always shown as the raw
+    crop regardless of baseline correction or alignment.
     """
 
     import matplotlib.pyplot as plt
@@ -374,7 +421,23 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
     curve1 = get_curve(name1)
     curve2 = get_curve(name2) if name2 else None
 
-    fig, ax = plt.subplots()
+    bands = []
+    if show_bands:
+        for name in (name1, name2):
+            if name:
+                band = HPTLC_extracter.get_spot_band(name, elu, obs)
+                if band is not None:
+                    bands.append((name, band))
+
+    if bands:
+        fig, all_axes = plt.subplots(
+            1 + len(bands), 1, sharex=True,
+            gridspec_kw={"height_ratios": [4] + [1] * len(bands)},
+        )
+        ax, band_axes = all_axes[0], all_axes[1:]
+    else:
+        fig, ax = plt.subplots()
+        band_axes = []
 
     # Scale from what the full RGB view would show for the sample(s)
     # actually on screen — plot all three reference channels first, let
@@ -404,5 +467,13 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
 
     ax.set_ylim(ylim)
     ax.legend()
+
+    # Each band is resized to `resolution` columns (hptlc.HPTLC_extracter.
+    # resolution), the same point count as the curve above, so a column here
+    # lines up with the same x position on the curve.
+    for band_ax, (name, band) in zip(band_axes, bands):
+        band_ax.imshow(band, aspect="auto", extent=[0, band.shape[1], 0, 1])
+        band_ax.set_yticks([])
+        band_ax.set_ylabel(name, rotation=0, ha="right", va="center", fontsize=9)
 
     return fig

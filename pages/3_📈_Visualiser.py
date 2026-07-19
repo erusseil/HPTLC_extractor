@@ -70,13 +70,19 @@ with col2:
     baseline_key = "vis_baseline_removed"
     baseline_removed = st.session_state.get(baseline_key, True)
 
+    bands_key = "vis_show_bands"
+    show_bands = st.session_state.get(bands_key, False)
+
+    # Bands always show the raw, unaligned crop, so aligning the curve above
+    # while a band is shown would throw off the visual correlation between
+    # the two — force alignment off whenever a band is displayed.
     alignment_key = "vis_show_alignment"
-    show_alignment = baseline_removed and st.session_state.get(alignment_key, False)
+    show_alignment = baseline_removed and not show_bands and st.session_state.get(alignment_key, False)
 
     aligned_curves = compare.get_alignment(eluant, obs) if show_alignment else None
 
     fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2, baseline_removed=baseline_removed,
-                            aligned_curves=aligned_curves, channels=channels)
+                            aligned_curves=aligned_curves, channels=channels, show_bands=show_bands)
     st.pyplot(fig, use_container_width=True)
 
     if show_alignment:
@@ -98,9 +104,18 @@ with col2:
     )
     st.toggle(
         "Show migration-axis alignment", value=show_alignment, key=alignment_key,
-        disabled=not baseline_removed,
+        disabled=(not baseline_removed) or show_bands,
         help="Show the curves after the same shift-only alignment used when computing "
              "distances, so you can check the correction against the raw curves above. "
              "Only available on baseline-corrected curves, since that's what distances "
-             "are computed from.",
+             "are computed from, and disabled while showing the extraction band, since "
+             "the band is always the raw, unaligned crop.",
+    )
+    st.toggle(
+        "Show extraction band", value=show_bands, key=bands_key,
+        help="Show the actual photographed strip each curve was averaged from, stretched "
+             "to line up column-for-column with the curve above it. Only available for "
+             "samples extracted after this feature was added — older extractions have "
+             "nothing saved to show. Turns off migration-axis alignment while active, "
+             "since the band shown is always the raw, unaligned crop.",
     )
