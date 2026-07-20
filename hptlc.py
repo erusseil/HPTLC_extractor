@@ -319,24 +319,73 @@ class HPTLC_extracter():
         return 0
 
     @staticmethod
-    def fit_baseline(sample, baseline_lam):
+    def detect_signal_offset(sample):
+        """Index after which the signal has permanently returned to the
+        noise floor — the mirror of detect_signal_onset, scanning from the
+        migration front backward instead of from the origin forward.
+        Returns len(sample) if no such point is found (nothing to force
+        flat, same convention as detect_signal_onset returning 0)."""
+        n = len(sample)
+        reversed_onset = HPTLC_extracter.detect_signal_onset(sample[::-1])
+        if reversed_onset == 0:
+            return n
+        return n - reversed_onset
+
+    @staticmethod
+    def fit_baseline_legacy_fabc_auto(sample, baseline_lam):
+        """The original baseline fit: fabc decides point-by-point which
+        values count as baseline using its own automatic (continuous
+        wavelet transform based) classification. Kept only so the newer
+        fit_baseline below can be reverted to this in one line if needed —
+        not called anywhere by default."""
 
         from pybaselines import Baseline
 
         baseline_fitter = Baseline()
         baseline, _ = baseline_fitter.fabc(sample, lam=baseline_lam)
 
-        # Nothing has migrated yet before the first real signal, so the
-        # curve (and therefore the baseline) must be flat there — force
-        # it flat instead of trusting the fit's behavior at that edge.
-        # Use the signal's own median over that region as the flat value,
-        # not the fit's value right at the boundary: fabc's spline eases
-        # into a nearby steep rise smoothly rather than with a sharp
-        # corner, so baseline[onset] can already be pulled well above the
-        # true flat level by the peak starting right after it.
         onset = HPTLC_extracter.detect_signal_onset(sample)
         if onset > 0:
             baseline[:onset] = np.median(sample[:onset])
+
+        median = np.median(sample - baseline)
+        return baseline - median
+
+    @staticmethod
+    def fit_baseline(sample, baseline_lam):
+        """fabc's own automatic point classification is a hard, per-point
+        decision (via a continuous wavelet transform threshold) — ordinary
+        pixel noise can flip a borderline point between "baseline" and
+        "signal" for two otherwise near-identical curves, making the fitted
+        baseline (and so the corrected curve) less reproducible than it
+        should be. Instead of trusting that classification, anchor it
+        ourselves: the leading and trailing regions outside
+        [onset, offset) are guaranteed compound-free by the same noise-floor
+        logic already used for onset detection, so treat only those as
+        baseline and have fabc smooth through just them (weights_as_mask
+        skips its own classification entirely), leaving the possibly-peak
+        region in between to be interpolated across rather than classified.
+        """
+
+        from pybaselines import Baseline
+
+        onset = HPTLC_extracter.detect_signal_onset(sample)
+        offset = HPTLC_extracter.detect_signal_offset(sample)
+
+        mask = np.ones(len(sample))
+        mask[onset:offset] = 0
+
+        baseline_fitter = Baseline()
+        baseline, _ = baseline_fitter.fabc(sample, lam=baseline_lam, weights=mask, weights_as_mask=True)
+
+        # Same reasoning as before: force the confirmed-flat regions to
+        # their own median rather than trust the smoother's value right at
+        # the boundary, which can still be pulled toward the excluded
+        # region by the smoothing regularization.
+        if onset > 0:
+            baseline[:onset] = np.median(sample[:onset])
+        if offset < len(sample):
+            baseline[offset:] = np.median(sample[offset:])
 
         #Shift for median to be at zero
         median = np.median(sample - baseline)
