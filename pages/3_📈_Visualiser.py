@@ -88,11 +88,15 @@ with col2:
     if show_alignment:
         shown = [n for n in (sample_name, name2) if n and aligned_curves and n in aligned_curves]
         if shown:
-            deltas = " · ".join(f"{n}: {aligned_curves[n]['delta']:+.4f}" for n in shown)
+            corrections = " · ".join(
+                f"{n}: ×{aligned_curves[n]['stretch']:.3f} {aligned_curves[n]['delta']:+.4f}"
+                for n in shown
+            )
             st.caption(
-                f"Migration-axis shift applied — {deltas} (translation over the curve's "
-                "normalized [0, 1] domain; positive = shifted later). Recomputed from the "
-                "current database, same as when distances are recomputed."
+                f"Migration-axis correction applied — {corrections} (stretch around the "
+                "curve's normalized [0, 1] domain, then a shift; stretch >1 = elongated, "
+                "positive shift = later). Recomputed from the current database, same as "
+                "when distances are recomputed."
             )
         else:
             st.caption("No alignment to show — the selected sample(s) have no data for this combo.")

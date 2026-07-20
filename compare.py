@@ -5,8 +5,17 @@ import os
 import hptlc
 import skfda
 from skfda.preprocessing.dim_reduction import FPCA
-from skfda.preprocessing.registration import LeastSquaresShiftRegistration
+from scipy.optimize import minimize
 import math
+
+# Bounds for the migration-axis correction (see align_channels): a solvent
+# front that runs a little long or short at the plate's edges doesn't just
+# delay a curve, it can compress or stretch it slightly too. Both are kept
+# tight so the fit can't explain away a real difference between two samples
+# as if it were geometric distortion.
+STRETCH_BOUNDS = (0.9, 1.1)
+SHIFT_BOUNDS = (-0.05, 0.05)
+ALIGNMENT_MAX_ITER = 5
 
 n_components = 5
 main_folder_path = hptlc.HPTLC_extracter.main_folder_path
@@ -57,47 +66,71 @@ def load_standard_curves(elu, obs):
     return names, np.array(all_r), np.array(all_g), np.array(all_b)
 
 
-def compute_shifts(r, g, b, grid_points):
-    """Per-sample translation (in the curve's normalized [0, 1] domain) that
-    best aligns the combined R+G+B signal to the population's mean.
+def _warp(curve, grid_points, stretch, shift):
+    """Evaluate `curve` (defined on grid_points, which runs from the origin
+    at 0 to the migration front at 1) at stretch * t + shift for every t —
+    i.e. resample it as if the plate's migration axis were rescaled and
+    offset. Points that land outside the curve's original range are held
+    at that edge's own value rather than extrapolated (numpy's default
+    out-of-range behavior for interp)."""
+    return np.interp(stretch * grid_points + shift, grid_points, curve)
 
-    Estimated from the combined signal — using all three channels' info
-    rather than picking one arbitrarily — since the shift itself is a single
-    physical migration-distance offset shared by all three.
+
+def compute_affine_params(combined, grid_points):
+    """Per-sample (stretch, shift) that best aligns each row of `combined`
+    (the R+G+B signal) to the population's mean, within STRETCH_BOUNDS /
+    SHIFT_BOUNDS. Iterates the template the same way shift-only registration
+    does: re-estimate the population mean from the current best alignment,
+    re-fit every sample against it, repeat.
     """
-    combined_fd = skfda.FDataGrid(data_matrix=r + g + b, grid_points=grid_points,
-                                   extrapolation="bounds")
-    shift_registration = LeastSquaresShiftRegistration(extrapolation="bounds")
-    shift_registration.fit_transform(combined_fd)
-    return shift_registration.deltas_
+    n_samples = combined.shape[0]
+    stretches = np.ones(n_samples)
+    shifts = np.zeros(n_samples)
+
+    for _ in range(ALIGNMENT_MAX_ITER):
+        warped = np.array([_warp(combined[i], grid_points, stretches[i], shifts[i])
+                            for i in range(n_samples)])
+        template = warped.mean(axis=0)
+
+        for i in range(n_samples):
+            def cost(params, i=i):
+                stretch, shift = params
+                return np.sum((_warp(combined[i], grid_points, stretch, shift) - template) ** 2)
+
+            result = minimize(cost, x0=[stretches[i], shifts[i]],
+                               bounds=[STRETCH_BOUNDS, SHIFT_BOUNDS], method="L-BFGS-B")
+            stretches[i], shifts[i] = result.x
+
+    return stretches, shifts
 
 
-def apply_shifts(r, g, b, grid_points, deltas):
-    """Translate each channel by its sample's shift. Translation only —
-    curves are never stretched or compressed — and points that shift past
-    the original edge are filled with that edge's own value rather than
-    extrapolated.
-    """
-    rgb_fd = skfda.FDataGrid(data_matrix=np.stack([r, g, b], axis=-1), grid_points=grid_points,
-                              extrapolation="bounds")
-    aligned = rgb_fd.shift(deltas, extrapolation="bounds").data_matrix
-    return aligned[:, :, 0], aligned[:, :, 1], aligned[:, :, 2]
+def apply_affine(r, g, b, grid_points, stretches, shifts):
+    """Apply each sample's (stretch, shift) to all three channels alike —
+    the correction is a single physical migration-axis distortion shared by
+    all three, not something specific to one channel."""
+    n_samples = r.shape[0]
+    channels = []
+    for channel in (r, g, b):
+        channels.append(np.array([_warp(channel[i], grid_points, stretches[i], shifts[i])
+                                   for i in range(n_samples)]))
+    return channels
 
 
 def align_channels(r, g, b, grid_points):
-    """Shift each sample's R/G/B curves by one shared, per-sample translation
-    along the migration axis, so an uneven solvent front (which shifts the
-    whole spectrum, not just one channel) doesn't get mistaken for a
-    different compound by the FPCA/distance steps downstream.
+    """Warp each sample's R/G/B curves by one shared, per-sample
+    stretch-and-shift along the migration axis, so an uneven solvent front
+    (which can both delay and slightly compress/stretch the whole spectrum,
+    not just one channel) doesn't get mistaken for a different compound by
+    the FPCA/distance steps downstream.
     """
-    deltas = compute_shifts(r, g, b, grid_points)
-    return apply_shifts(r, g, b, grid_points, deltas)
+    stretches, shifts = compute_affine_params(r + g + b, grid_points)
+    return apply_affine(r, g, b, grid_points, stretches, shifts)
 
 
 def get_alignment(elu, obs):
-    """Per-sample shift and aligned curves for one combo, computed exactly
-    as `update_fpca` does it — lets the Visualiser show what the
-    migration-axis correction actually did, for sanity-checking.
+    """Per-sample (stretch, shift) and aligned curves for one combo,
+    computed exactly as `update_fpca` does it — lets the Visualiser show
+    what the migration-axis correction actually did, for sanity-checking.
 
     Returns a dict keyed by sample name, or {} if no sample has data yet.
     """
@@ -106,11 +139,12 @@ def get_alignment(elu, obs):
         return {}
 
     grid_points = np.linspace(0, 1, r.shape[1])
-    deltas = compute_shifts(r, g, b, grid_points)
-    r_aligned, g_aligned, b_aligned = apply_shifts(r, g, b, grid_points, deltas)
+    stretches, shifts = compute_affine_params(r + g + b, grid_points)
+    r_aligned, g_aligned, b_aligned = apply_affine(r, g, b, grid_points, stretches, shifts)
 
     return {
-        name: {"delta": deltas[i], "R": r_aligned[i], "G": g_aligned[i], "B": b_aligned[i]}
+        name: {"stretch": stretches[i], "delta": shifts[i],
+               "R": r_aligned[i], "G": g_aligned[i], "B": b_aligned[i]}
         for i, name in enumerate(names)
     }
 
