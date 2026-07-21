@@ -425,7 +425,16 @@ class HPTLC_extracter():
         whole track just sits at a slightly different overall level than
         another (e.g. a long, low-amplitude offset spanning most of the
         curve) without assuming anything about how that level drifts within
-        the curve itself."""
+        the curve itself.
+
+        Those same confirmed-background regions are then flattened to
+        exactly zero. There's no real signal there by construction (that's
+        what "confirmed background" means), so any remaining wiggle is pure
+        pixel noise — left alone, a derivative computed downstream would
+        pick up fake spikes from that noise instead of just the real peaks
+        in between. The region between onset and offset (possibly real
+        signal) is never touched.
+        """
         onset = HPTLC_extracter.detect_signal_onset(sample)
         offset = HPTLC_extracter.detect_signal_offset(sample)
 
@@ -433,7 +442,10 @@ class HPTLC_extracter():
         if len(background_points) == 0:
             return sample
 
-        return sample - np.median(background_points)
+        shifted = sample - np.median(background_points)
+        shifted[:onset] = 0.0
+        shifted[offset:] = 0.0
+        return shifted
 
     @staticmethod
     def get_display_curve(name, elu, obs, baseline_removed=True):
@@ -465,26 +477,36 @@ _CHANNEL_COLORS = {"R": '#c4110e', "G": '#24b00e', "B": '#352db5', "Luminance": 
 _CHANNEL_PASTELS = {"R": '#e86664', "G": '#94d48a', "B": '#a7a4db', "Luminance": '#9CA3AF'}
 
 
-def _channel_value(curve, label):
+def _channel_value(curve, label, derivative=False):
     """curve is an (R, G, B) triple (lists or arrays); returns the array for
     one plotted line. Luminance is the unweighted average of the three —
     R, G and B are already comparable normalized intensities, not display
     gamma values, so a plain average is the right "how much signal overall"
-    proxy rather than a perceptual luma formula."""
+    proxy rather than a perceptual luma formula.
+
+    derivative plots the rate of change instead of the value itself — see
+    compare.compute_derivative for why that's useful (it cancels out a flat
+    offset almost entirely while a sharp peak still stands out)."""
     r, g, b = (np.asarray(curve[0]), np.asarray(curve[1]), np.asarray(curve[2]))
     if label == "R":
-        return r
-    if label == "G":
-        return g
-    if label == "B":
-        return b
-    if label == "Luminance":
-        return (r + g + b) / 3
-    raise ValueError(f"Unknown channel: {label}")
+        values = r
+    elif label == "G":
+        values = g
+    elif label == "B":
+        values = b
+    elif label == "Luminance":
+        values = (r + g + b) / 3
+    else:
+        raise ValueError(f"Unknown channel: {label}")
+
+    if derivative:
+        grid_points = np.linspace(0, 1, len(values))
+        values = np.gradient(values, grid_points[1] - grid_points[0])
+    return values
 
 
 def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None, channels="RGB",
-               show_bands=False):
+               show_bands=False, show_derivative=False):
     """aligned_curves, if given, is the {name: {"R", "G", "B", ...}} dict
     from compare.get_alignment() — samples present in it are plotted with
     their migration-axis correction applied instead of the raw standard
@@ -499,6 +521,9 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
     extraction band (see HPTLC_extracter.save_spot_band) — the actual
     photographed strip the curve was averaged from, always shown as the raw
     crop regardless of baseline correction or alignment.
+
+    show_derivative plots the rate of change of whatever's being shown
+    (post-alignment if alignment is on) instead of its value.
     """
 
     import matplotlib.pyplot as plt
@@ -540,9 +565,9 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
     # comparison's) own real dynamic range, rather than autoscaling to
     # whatever tiny noise happens to be on screen — and a comparison against
     # a second sample gets its own range, since both curves feed the autoscale.
-    reference_lines = [ax.plot(_channel_value(curve1, label))[0] for label in ["R", "G", "B"]]
+    reference_lines = [ax.plot(_channel_value(curve1, label, show_derivative))[0] for label in ["R", "G", "B"]]
     if curve2 is not None:
-        reference_lines += [ax.plot(_channel_value(curve2, label))[0] for label in ["R", "G", "B"]]
+        reference_lines += [ax.plot(_channel_value(curve2, label, show_derivative))[0] for label in ["R", "G", "B"]]
     ax.relim()
     ax.autoscale_view()
     ylim = ax.get_ylim()
@@ -550,15 +575,16 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
         line.remove()
 
     for label in labels:
-        ax.plot(_channel_value(curve1, label), color=_CHANNEL_COLORS[label],
+        ax.plot(_channel_value(curve1, label, show_derivative), color=_CHANNEL_COLORS[label],
                  label=f"{name1} ({label})", alpha=0.8)
 
     if curve2 is not None:
         for label in labels:
-            ax.plot(_channel_value(curve2, label), color=_CHANNEL_PASTELS[label],
+            ax.plot(_channel_value(curve2, label, show_derivative), color=_CHANNEL_PASTELS[label],
                      label=f"{name2} ({label})", linestyle="dashed", alpha=1)
 
     ax.set_ylim(ylim)
+    ax.set_ylabel("d(intensity)/dt" if show_derivative else "intensity")
     ax.legend()
 
     # Each band is resized to `resolution` columns (hptlc.HPTLC_extracter.

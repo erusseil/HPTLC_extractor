@@ -17,7 +17,10 @@ STRETCH_BOUNDS = (0.9, 1.1)
 SHIFT_BOUNDS = (-0.05, 0.05)
 ALIGNMENT_MAX_ITER = 5
 
-n_components = 5
+n_components = 5 #Per representation (curve value, curve derivative) — the
+                  #two get concatenated into a total_components-length
+                  #feature vector, not n_components alone.
+total_components = 2 * n_components
 main_folder_path = hptlc.HPTLC_extracter.main_folder_path
 
 def get_file_names():
@@ -41,7 +44,7 @@ def create_feature_tables():
         for obs in hptlc.HPTLC_extracter.standard_observations:
             indexes.append(elu + "_" + obs)
 
-    empty = pd.DataFrame(data=None, index=range(n_components), columns=indexes)
+    empty = pd.DataFrame(data=None, index=range(total_components), columns=indexes)
 
     for file in no_extension_files:
         if not os.path.isfile(f"{main_folder_path}/features/{file}.csv"):
@@ -149,6 +152,33 @@ def get_alignment(elu, obs):
     }
 
 
+def compute_derivative(matrix, grid_points):
+    """First derivative of each row along its own axis, computed per channel
+    (R, G, B separately) before concatenation — differentiating straight
+    through a concatenated R/G/B vector would create a fake spike at every
+    channel boundary, where the value jumps discontinuously.
+
+    A near-constant or slowly-drifting difference between two curves has a
+    derivative close to zero almost everywhere, while a real peak's sharp
+    rise and fall survives strongly — the point of fitting FPCA on this
+    alongside the raw curve, not instead of it.
+    """
+    dt = grid_points[1] - grid_points[0]
+    return np.gradient(matrix, dt, axis=1)
+
+
+def _fit_fpca_features(data_matrix):
+    """Fit FPCA on a (n_samples, n_points) matrix and return its
+    n_components-length coefficient vector per sample."""
+    fd = skfda.representation.grid.FDataGrid(
+        data_matrix=data_matrix,
+        grid_points=np.linspace(0, 1, data_matrix.shape[1])
+    )
+    fpca = FPCA(n_components=n_components)
+    fpca.fit(fd)
+    return fpca.transform(fd)
+
+
 def update_fpca(elu, obs):
 
     # Create new tables in case a new molecule was added
@@ -159,17 +189,26 @@ def update_fpca(elu, obs):
 
         grid_points = np.linspace(0, 1, r.shape[1])
         r, g, b = align_channels(r, g, b, grid_points)
+        value_matrix = np.concatenate([r, g, b], axis=1)
 
-        data_matrix = np.concatenate([r, g, b], axis=1)
-
-        fd = skfda.representation.grid.FDataGrid(
-            data_matrix=data_matrix,
-            grid_points=np.linspace(0, 1, data_matrix.shape[1])
+        derivative_matrix = np.concatenate(
+            [compute_derivative(r, grid_points), compute_derivative(g, grid_points),
+             compute_derivative(b, grid_points)],
+            axis=1,
         )
+        # Same normalization as the curves themselves: each sample's own
+        # combined R+G+B is divided by that sample's own max abs (not a
+        # single constant shared across the whole population) — otherwise
+        # the derivative's naturally larger numeric scale would dominate the
+        # combined feature vector's Euclidean distance by sheer magnitude,
+        # not by being more informative, and every sample's normalization
+        # would shift depending on who else happens to be in the database.
+        derivative_matrix = derivative_matrix / np.max(np.abs(derivative_matrix), axis=1, keepdims=True)
 
-        fpca = FPCA(n_components=n_components)
-        fpca.fit(fd)
-        coefficients = fpca.transform(fd)
+        coefficients = np.concatenate([
+            _fit_fpca_features(value_matrix),
+            _fit_fpca_features(derivative_matrix),
+        ], axis=1)
 
         # Update with new coeffiecients (only for samples that had data for this combo)
         for idx, file in enumerate(included_files):

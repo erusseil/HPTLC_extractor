@@ -76,10 +76,14 @@ with col2:
     alignment_key = "vis_show_alignment"
     show_alignment = not show_bands and st.session_state.get(alignment_key, False)
 
+    derivative_key = "vis_show_derivative"
+    show_derivative = st.session_state.get(derivative_key, False)
+
     aligned_curves = compare.get_alignment(eluant, obs) if show_alignment else None
 
     fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2,
-                            aligned_curves=aligned_curves, channels=channels, show_bands=show_bands)
+                            aligned_curves=aligned_curves, channels=channels, show_bands=show_bands,
+                            show_derivative=show_derivative)
     st.pyplot(fig, use_container_width=True)
 
     if show_alignment:
@@ -113,4 +117,11 @@ with col2:
              "samples extracted after this feature was added — older extractions have "
              "nothing saved to show. Turns off migration-axis alignment while active, "
              "since the band shown is always the raw, unaligned crop.",
+    )
+    st.toggle(
+        "Show derivative", value=show_derivative, key=derivative_key,
+        help="Plot the rate of change instead of the value — a flat offset between two "
+             "curves nearly cancels out, while a sharp peak still stands out clearly. This "
+             "is one of the two views combined into the distance calculation (the other "
+             "being the plain curve above), shown here so you can see how it behaves.",
     )
