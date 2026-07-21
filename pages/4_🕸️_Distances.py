@@ -41,8 +41,8 @@ with col1:
 
     st.subheader("Similarity graph")
     threshold = st.slider(
-        "Graph connection threshold", value=0.05, min_value=0.0, max_value=1.0, step=0.01,
-        format="%.2f",
+        "Graph connection threshold", value=0.05, min_value=0.0, max_value=0.25, step=0.005,
+        format="%.3f",
         help="Samples with an average distance below this value are linked.",
     )
 
