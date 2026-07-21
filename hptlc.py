@@ -14,6 +14,18 @@ class HPTLC_extracter():
     resolution = 500
     extra = 0.03 #Extra length to add top and bottom in percent of the migration length
     lam = 1e7 #Value used in the baseline fit
+    baseline_correction_enabled = False #Both baseline fitters tried so far (fabc's own
+                                         #auto-classification and the onset/offset-anchored
+                                         #version) could fabricate values that were never in
+                                         #the photo (e.g. driving points negative in valleys
+                                         #between peaks), which is a worse problem than the
+                                         #residual drift they were removing. Disabled for now
+                                         #in favor of background subtraction alone; revisit
+                                         #if drift turns out to matter once real cross-plate
+                                         #photos come in — e.g. with a full empty-plate photo
+                                         #as a per-column background reference instead of one
+                                         #bckg track. Both fit_baseline* methods are left
+                                         #intact below so this is a one-line flip back on.
     onset_noise_fraction = 0.03 #Leading fraction of the curve used to estimate the noise
                                  #floor when detecting where the first real signal begins.
                                  #Kept small (matching the `extra` margin) so a genuine early
@@ -247,8 +259,12 @@ class HPTLC_extracter():
             sub = sample[:, i]
             bkg = background[:, i]
             background_corrected = HPTLC_extracter.subsample(sub - bkg, resolution)
-            baseline_fit = HPTLC_extracter.fit_baseline(background_corrected, lam)
-            norm_sample.append(background_corrected - baseline_fit)
+
+            if HPTLC_extracter.baseline_correction_enabled:
+                baseline_fit = HPTLC_extracter.fit_baseline(background_corrected, lam)
+                background_corrected = background_corrected - baseline_fit
+
+            norm_sample.append(background_corrected)
 
         norm_sample = np.array(norm_sample).T / np.max(np.abs(norm_sample))
 
