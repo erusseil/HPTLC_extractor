@@ -26,6 +26,12 @@ class HPTLC_extracter():
                                          #as a per-column background reference instead of one
                                          #bckg track. Both fit_baseline* methods are left
                                          #intact below so this is a one-line flip back on.
+    constant_shift_correction_enabled = True #A single scalar subtracted from each channel
+                                         #(the median of its confirmed-background regions),
+                                         #not a fitted curve — can't invent shape the way the
+                                         #two baseline fitters above did, so it's a much lower
+                                         #risk way to remove a track that's just sitting at the
+                                         #wrong overall level.
     onset_noise_fraction = 0.03 #Leading fraction of the curve used to estimate the noise
                                  #floor when detecting where the first real signal begins.
                                  #Kept small (matching the `extra` margin) so a genuine early
@@ -264,6 +270,9 @@ class HPTLC_extracter():
                 baseline_fit = HPTLC_extracter.fit_baseline(background_corrected, lam)
                 background_corrected = background_corrected - baseline_fit
 
+            if HPTLC_extracter.constant_shift_correction_enabled:
+                background_corrected = HPTLC_extracter.constant_shift_correction(background_corrected)
+
             norm_sample.append(background_corrected)
 
         norm_sample = np.array(norm_sample).T / np.max(np.abs(norm_sample))
@@ -406,6 +415,25 @@ class HPTLC_extracter():
         #Shift for median to be at zero
         median = np.median(sample - baseline)
         return baseline - median
+
+    @staticmethod
+    def constant_shift_correction(sample):
+        """Re-center a curve to zero using only its confirmed-background
+        regions (before onset, after offset) — a single scalar shift, never
+        a fitted curve, so unlike the two baseline fitters above it can't
+        invent shape that wasn't in the photo. Meant for the case where a
+        whole track just sits at a slightly different overall level than
+        another (e.g. a long, low-amplitude offset spanning most of the
+        curve) without assuming anything about how that level drifts within
+        the curve itself."""
+        onset = HPTLC_extracter.detect_signal_onset(sample)
+        offset = HPTLC_extracter.detect_signal_offset(sample)
+
+        background_points = np.concatenate([sample[:onset], sample[offset:]])
+        if len(background_points) == 0:
+            return sample
+
+        return sample - np.median(background_points)
 
     @staticmethod
     def get_display_curve(name, elu, obs, baseline_removed=True):
