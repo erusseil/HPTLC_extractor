@@ -67,9 +67,6 @@ with col2:
 
     # Read before rendering the plot so the toggles can be placed below it
     # while still reflecting the current click on this same render.
-    baseline_key = "vis_baseline_removed"
-    baseline_removed = st.session_state.get(baseline_key, True)
-
     bands_key = "vis_show_bands"
     show_bands = st.session_state.get(bands_key, False)
 
@@ -77,11 +74,11 @@ with col2:
     # while a band is shown would throw off the visual correlation between
     # the two — force alignment off whenever a band is displayed.
     alignment_key = "vis_show_alignment"
-    show_alignment = baseline_removed and not show_bands and st.session_state.get(alignment_key, False)
+    show_alignment = not show_bands and st.session_state.get(alignment_key, False)
 
     aligned_curves = compare.get_alignment(eluant, obs) if show_alignment else None
 
-    fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2, baseline_removed=baseline_removed,
+    fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2,
                             aligned_curves=aligned_curves, channels=channels, show_bands=show_bands)
     st.pyplot(fig, use_container_width=True)
 
@@ -102,18 +99,12 @@ with col2:
             st.caption("No alignment to show — the selected sample(s) have no data for this combo.")
 
     st.toggle(
-        "Baseline-corrected", value=baseline_removed, key=baseline_key,
-        help="Turn off to see the curve as background-subtracted only, before baseline "
-             "removal — useful for judging how well the correction is working.",
-    )
-    st.toggle(
         "Show migration-axis alignment", value=show_alignment, key=alignment_key,
-        disabled=(not baseline_removed) or show_bands,
+        disabled=show_bands,
         help="Show the curves after the same shift-only alignment used when computing "
              "distances, so you can check the correction against the raw curves above. "
-             "Only available on baseline-corrected curves, since that's what distances "
-             "are computed from, and disabled while showing the extraction band, since "
-             "the band is always the raw, unaligned crop.",
+             "Disabled while showing the extraction band, since the band is always the "
+             "raw, unaligned crop.",
     )
     st.toggle(
         "Show extraction band", value=show_bands, key=bands_key,
