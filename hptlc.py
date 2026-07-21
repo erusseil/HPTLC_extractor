@@ -40,6 +40,16 @@ class HPTLC_extracter():
                                #must reach to count as the start of a real signal.
     onset_min_consecutive = 3 #Number of consecutive points that must clear the threshold,
                                #so a single noise spike doesn't get mistaken for signal onset.
+    offset_noise_fraction = 0.2 #Wider than onset_noise_fraction: the trailing "no signal"
+                               #region can be much longer than a few percent of the curve
+                               #(often most of it), and a short reference window sampled
+                               #right at the very end can look artificially quiet by chance
+                               #relative to that whole span — one ordinary-sized wiggle
+                               #elsewhere then reads as "signal" and stops the confirmed
+                               #region far earlier than it should. A wider reference gives a
+                               #more representative noise estimate for that long span. Not
+                               #used for onset, where a wide window risks folding a genuine
+                               #early peak into the noise estimate itself.
 
     def __init__(self, names, length, front, X_offset, Y_offset, inter_spot_dist):
 
@@ -319,7 +329,7 @@ class HPTLC_extracter():
             raise ValueError(message)
 
     @staticmethod
-    def detect_signal_onset(sample):
+    def detect_signal_onset(sample, noise_fraction=None):
         """Index where a real signal first rises out of the noise.
 
         The leading fraction of the curve is guaranteed to be compound-free
@@ -327,9 +337,16 @@ class HPTLC_extracter():
         a good estimate of pure noise. Onset is the first run of several
         consecutive points that clears a threshold above that noise floor.
         Returns 0 if no clear onset is found (nothing to force flat).
+
+        noise_fraction overrides onset_noise_fraction — used by
+        detect_signal_offset, which needs a wider reference window (see
+        offset_noise_fraction).
         """
+        if noise_fraction is None:
+            noise_fraction = HPTLC_extracter.onset_noise_fraction
+
         n = len(sample)
-        noise_len = max(5, int(n * HPTLC_extracter.onset_noise_fraction))
+        noise_len = max(5, int(n * noise_fraction))
         noise_region = sample[:noise_len]
         noise_mean = np.mean(noise_region)
         noise_std = np.std(noise_region)
@@ -347,11 +364,15 @@ class HPTLC_extracter():
     def detect_signal_offset(sample):
         """Index after which the signal has permanently returned to the
         noise floor — the mirror of detect_signal_onset, scanning from the
-        migration front backward instead of from the origin forward.
-        Returns len(sample) if no such point is found (nothing to force
-        flat, same convention as detect_signal_onset returning 0)."""
+        migration front backward instead of from the origin forward, with a
+        wider noise reference (offset_noise_fraction) since that trailing
+        span tends to be much longer than onset's leading margin. Returns
+        len(sample) if no such point is found (nothing to force flat, same
+        convention as detect_signal_onset returning 0)."""
         n = len(sample)
-        reversed_onset = HPTLC_extracter.detect_signal_onset(sample[::-1])
+        reversed_onset = HPTLC_extracter.detect_signal_onset(
+            sample[::-1], noise_fraction=HPTLC_extracter.offset_noise_fraction
+        )
         if reversed_onset == 0:
             return n
         return n - reversed_onset
@@ -427,13 +448,16 @@ class HPTLC_extracter():
         curve) without assuming anything about how that level drifts within
         the curve itself.
 
-        Those same confirmed-background regions are then flattened to
+        The confirmed-background region after offset is then flattened to
         exactly zero. There's no real signal there by construction (that's
         what "confirmed background" means), so any remaining wiggle is pure
         pixel noise — left alone, a derivative computed downstream would
         pick up fake spikes from that noise instead of just the real peaks
-        in between. The region between onset and offset (possibly real
-        signal) is never touched.
+        in between. The leading region before onset is only re-centered,
+        not flattened the same way: forcing it flat right up against where
+        a genuine peak begins created a visible, artificial-looking cliff
+        at the transition. The region between onset and offset (possibly
+        real signal) is never touched either way.
         """
         onset = HPTLC_extracter.detect_signal_onset(sample)
         offset = HPTLC_extracter.detect_signal_offset(sample)
@@ -443,7 +467,6 @@ class HPTLC_extracter():
             return sample
 
         shifted = sample - np.median(background_points)
-        shifted[:onset] = 0.0
         shifted[offset:] = 0.0
         return shifted
 
@@ -477,32 +500,39 @@ _CHANNEL_COLORS = {"R": '#c4110e', "G": '#24b00e', "B": '#352db5', "Luminance": 
 _CHANNEL_PASTELS = {"R": '#e86664', "G": '#94d48a', "B": '#a7a4db', "Luminance": '#9CA3AF'}
 
 
-def _channel_value(curve, label, derivative=False):
+def _channel_value(curve, label):
     """curve is an (R, G, B) triple (lists or arrays); returns the array for
     one plotted line. Luminance is the unweighted average of the three —
     R, G and B are already comparable normalized intensities, not display
     gamma values, so a plain average is the right "how much signal overall"
-    proxy rather than a perceptual luma formula.
-
-    derivative plots the rate of change instead of the value itself — see
-    compare.compute_derivative for why that's useful (it cancels out a flat
-    offset almost entirely while a sharp peak still stands out)."""
+    proxy rather than a perceptual luma formula."""
     r, g, b = (np.asarray(curve[0]), np.asarray(curve[1]), np.asarray(curve[2]))
     if label == "R":
-        values = r
-    elif label == "G":
-        values = g
-    elif label == "B":
-        values = b
-    elif label == "Luminance":
-        values = (r + g + b) / 3
-    else:
-        raise ValueError(f"Unknown channel: {label}")
+        return r
+    if label == "G":
+        return g
+    if label == "B":
+        return b
+    if label == "Luminance":
+        return (r + g + b) / 3
+    raise ValueError(f"Unknown channel: {label}")
 
-    if derivative:
-        grid_points = np.linspace(0, 1, len(values))
-        values = np.gradient(values, grid_points[1] - grid_points[0])
-    return values
+
+def _derivative_curve(curve):
+    """(R, G, B) -> their derivatives, normalized by their own shared max
+    abs (all three channels together) — the same scheme compare.py uses to
+    build the derivative-based FPCA features (each sample normalized by its
+    own max, not one constant for the whole database), so what's shown here
+    matches what actually feeds the distance calculation."""
+    r, g, b = (np.asarray(curve[0]), np.asarray(curve[1]), np.asarray(curve[2]))
+    grid_points = np.linspace(0, 1, len(r))
+    dt = grid_points[1] - grid_points[0]
+    dr, dg, db = np.gradient(r, dt), np.gradient(g, dt), np.gradient(b, dt)
+
+    max_abs = np.max(np.abs(np.concatenate([dr, dg, db])))
+    if max_abs == 0:
+        return dr, dg, db
+    return dr / max_abs, dg / max_abs, db / max_abs
 
 
 def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None, channels="RGB",
@@ -539,6 +569,11 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
     curve1 = get_curve(name1)
     curve2 = get_curve(name2) if name2 else None
 
+    if show_derivative:
+        curve1 = _derivative_curve(curve1)
+        if curve2 is not None:
+            curve2 = _derivative_curve(curve2)
+
     bands = []
     if show_bands:
         for name in (name1, name2):
@@ -565,9 +600,9 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
     # comparison's) own real dynamic range, rather than autoscaling to
     # whatever tiny noise happens to be on screen — and a comparison against
     # a second sample gets its own range, since both curves feed the autoscale.
-    reference_lines = [ax.plot(_channel_value(curve1, label, show_derivative))[0] for label in ["R", "G", "B"]]
+    reference_lines = [ax.plot(_channel_value(curve1, label))[0] for label in ["R", "G", "B"]]
     if curve2 is not None:
-        reference_lines += [ax.plot(_channel_value(curve2, label, show_derivative))[0] for label in ["R", "G", "B"]]
+        reference_lines += [ax.plot(_channel_value(curve2, label))[0] for label in ["R", "G", "B"]]
     ax.relim()
     ax.autoscale_view()
     ylim = ax.get_ylim()
@@ -575,16 +610,16 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
         line.remove()
 
     for label in labels:
-        ax.plot(_channel_value(curve1, label, show_derivative), color=_CHANNEL_COLORS[label],
+        ax.plot(_channel_value(curve1, label), color=_CHANNEL_COLORS[label],
                  label=f"{name1} ({label})", alpha=0.8)
 
     if curve2 is not None:
         for label in labels:
-            ax.plot(_channel_value(curve2, label, show_derivative), color=_CHANNEL_PASTELS[label],
+            ax.plot(_channel_value(curve2, label), color=_CHANNEL_PASTELS[label],
                      label=f"{name2} ({label})", linestyle="dashed", alpha=1)
 
     ax.set_ylim(ylim)
-    ax.set_ylabel("d(intensity)/dt" if show_derivative else "intensity")
+    ax.set_ylabel("d(intensity)/dt, normalized" if show_derivative else "intensity")
     ax.legend()
 
     # Each band is resized to `resolution` columns (hptlc.HPTLC_extracter.
