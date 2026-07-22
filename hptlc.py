@@ -535,6 +535,25 @@ def _derivative_curve(curve):
     return dr / max_abs, dg / max_abs, db / max_abs
 
 
+def _warp_band(band, stretch, shift):
+    """Apply the same per-sample migration-axis stretch+shift used for the
+    curve (see compare.compute_affine_params) to a band image's columns, so
+    it stays visually lined up with the (also warped) curve above it instead
+    of showing the raw, unaligned crop next to an aligned curve. Edges held
+    flat, same as the curve warp — never stretched/shifted content invented
+    beyond what the crop actually shows."""
+    resolution = band.shape[1]
+    grid_points = np.linspace(0, 1, resolution)
+    warped_points = stretch * grid_points + shift
+
+    warped = np.empty(band.shape, dtype=np.float64)
+    for row in range(band.shape[0]):
+        for channel in range(band.shape[2]):
+            warped[row, :, channel] = np.interp(warped_points, grid_points, band[row, :, channel])
+
+    return np.clip(np.round(warped), 0, 255).astype(np.uint8)
+
+
 def _band_data_uri(band):
     """Encode a band array as a base64 PNG data URI, for embedding via
     Plotly's layout.images — see the comment where it's used for why that's
@@ -564,8 +583,9 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
 
     show_bands adds a row below the curve for each shown sample with a saved
     extraction band (see HPTLC_extracter.save_spot_band) — the actual
-    photographed strip the curve was averaged from, always shown as the raw
-    crop regardless of baseline correction or alignment.
+    photographed strip the curve was averaged from. If aligned_curves is
+    also given, the band is warped by that same sample's stretch/shift so
+    it stays lined up with the aligned curve above it.
 
     show_derivative plots the rate of change of whatever's being shown
     (post-alignment if alignment is on) instead of its value.
@@ -599,6 +619,9 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
             if name:
                 band = HPTLC_extracter.get_spot_band(name, elu, obs)
                 if band is not None:
+                    if aligned_curves and name in aligned_curves:
+                        info = aligned_curves[name]
+                        band = _warp_band(band, info["stretch"], info["delta"])
                     bands.append((name, band))
 
     n_band_rows = len(bands)

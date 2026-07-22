@@ -70,11 +70,8 @@ with col2:
     bands_key = "vis_show_bands"
     show_bands = st.session_state.get(bands_key, False)
 
-    # Bands always show the raw, unaligned crop, so aligning the curve above
-    # while a band is shown would throw off the visual correlation between
-    # the two — force alignment off whenever a band is displayed.
     alignment_key = "vis_show_alignment"
-    show_alignment = not show_bands and st.session_state.get(alignment_key, False)
+    show_alignment = st.session_state.get(alignment_key, False)
 
     derivative_key = "vis_show_derivative"
     show_derivative = st.session_state.get(derivative_key, False)
@@ -104,19 +101,18 @@ with col2:
 
     st.toggle(
         "Show migration-axis alignment", value=show_alignment, key=alignment_key,
-        disabled=show_bands,
         help="Show the curves after the same shift-only alignment used when computing "
              "distances, so you can check the correction against the raw curves above. "
-             "Disabled while showing the extraction band, since the band is always the "
-             "raw, unaligned crop.",
+             "If the extraction band is also shown, it's warped by the same stretch/shift "
+             "so the two stay lined up.",
     )
     st.toggle(
         "Show extraction band", value=show_bands, key=bands_key,
         help="Show the actual photographed strip each curve was averaged from, stretched "
-             "to line up column-for-column with the curve above it. Only available for "
-             "samples extracted after this feature was added — older extractions have "
-             "nothing saved to show. Turns off migration-axis alignment while active, "
-             "since the band shown is always the raw, unaligned crop.",
+             "to line up column-for-column with the curve above it (and warped to match "
+             "if migration-axis alignment is also on). Only available for samples "
+             "extracted after this feature was added — older extractions have nothing "
+             "saved to show.",
     )
     st.toggle(
         "Show derivative", value=show_derivative, key=derivative_key,
