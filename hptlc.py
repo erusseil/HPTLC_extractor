@@ -535,6 +535,21 @@ def _derivative_curve(curve):
     return dr / max_abs, dg / max_abs, db / max_abs
 
 
+def _band_data_uri(band):
+    """Encode a band array as a base64 PNG data URI, for embedding via
+    Plotly's layout.images — see the comment where it's used for why that's
+    preferred over a go.Image trace here."""
+    import base64
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.fromarray(band).save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None, channels="RGB",
                show_bands=False, show_derivative=False):
     """aligned_curves, if given, is the {name: {"R", "G", "B", ...}} dict
@@ -629,14 +644,26 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
     # resolution), the same point count as the curve above, so a column here
     # lines up with the same x position on the curve — and shared_xaxes
     # keeps them in sync when zooming/panning the curve.
+    #
+    # Embedded via layout.images (sizing="stretch"), not a go.Image trace:
+    # go.Image hardcodes its y-axis to scale-anchor to its x-axis so the
+    # image's true pixel aspect ratio is always preserved, which then
+    # shrinks the whole figure's width to fit that ratio inside the row's
+    # short height. layout.images has no such constraint, so the band
+    # freely fills its row instead of dictating the plot's overall width.
     for row_idx, (name, band) in enumerate(bands, start=2):
-        fig.add_trace(go.Image(z=band), row=row_idx, col=1)
-        fig.update_yaxes(visible=False, row=row_idx, col=1)
+        fig.update_xaxes(range=[0, band.shape[1]], row=row_idx, col=1)
+        fig.update_yaxes(range=[0, 1], visible=False, row=row_idx, col=1)
+        fig.add_layout_image(
+            source=_band_data_uri(band), xref=f"x{row_idx}", yref=f"y{row_idx}",
+            x=0, y=1, sizex=band.shape[1], sizey=1,
+            xanchor="left", yanchor="top", sizing="stretch", layer="above",
+        )
 
     fig.update_yaxes(range=yrange, title_text=("d(intensity)/dt, normalized" if show_derivative else "intensity"),
                       row=1, col=1)
     fig.update_layout(
-        height=260 + 70 * n_band_rows,
+        height=520 + 140 * n_band_rows,
         margin=dict(l=10, r=10, t=30 if n_band_rows else 10, b=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
