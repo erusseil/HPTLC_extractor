@@ -46,15 +46,24 @@ with col1:
         help="Samples with an average distance below this value are linked.",
     )
 
+    # Stored in session_state and rendered outside the button's `if`, so it
+    # survives reruns triggered by unrelated widgets elsewhere on the page
+    # (e.g. the pairwise comparison selectboxes) instead of vanishing the
+    # moment anything else on the page is touched.
     if st.button("🕸️ Compute full graph", use_container_width=True):
         if not os.path.isfile(f"{DISTANCES_PATH}/average_distances.csv"):
             st.warning("No distances yet — recompute them first.")
+            st.session_state["distances_graph_fig"] = None
         else:
             G, labels, edges, scaled_weights = compare.build_graph(threshold)
             if G is None:
                 st.warning("The linking threshold is too low, or the samples are too different — no graph could be built.")
+                st.session_state["distances_graph_fig"] = None
             else:
-                st.plotly_chart(compare.plotly_distance_graph(G, labels, edges, scaled_weights), use_container_width=True)
+                st.session_state["distances_graph_fig"] = compare.plotly_distance_graph(G, labels, edges, scaled_weights)
+
+    if st.session_state.get("distances_graph_fig") is not None:
+        st.plotly_chart(st.session_state["distances_graph_fig"], use_container_width=True)
 
 with col2:
     st.subheader("Pairwise comparison")

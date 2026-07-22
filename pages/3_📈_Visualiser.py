@@ -84,7 +84,7 @@ with col2:
     fig = hptlc.show_curve(sample_name, eluant, obs, name2=name2,
                             aligned_curves=aligned_curves, channels=channels, show_bands=show_bands,
                             show_derivative=show_derivative)
-    st.pyplot(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
     if show_alignment:
         shown = [n for n in (sample_name, name2) if n and aligned_curves and n in aligned_curves]

@@ -554,9 +554,13 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
 
     show_derivative plots the rate of change of whatever's being shown
     (post-alignment if alignment is on) instead of its value.
+
+    Returns a Plotly figure (not matplotlib) so the caller gets interactive
+    zoom/pan for free via st.plotly_chart.
     """
 
-    import matplotlib.pyplot as plt
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
     labels = ["R", "G", "B"] if channels == "RGB" else [channels]
 
@@ -582,54 +586,58 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
                 if band is not None:
                     bands.append((name, band))
 
-    if bands:
-        fig, all_axes = plt.subplots(
-            1 + len(bands), 1, sharex=True,
-            gridspec_kw={"height_ratios": [4] + [1] * len(bands)},
-        )
-        ax, band_axes = all_axes[0], all_axes[1:]
+    n_band_rows = len(bands)
+    if n_band_rows:
+        row_heights = [4] + [1] * n_band_rows
+        total = sum(row_heights)
+        row_heights = [h / total for h in row_heights]
+        fig = make_subplots(rows=1 + n_band_rows, cols=1, shared_xaxes=True,
+                             row_heights=row_heights, vertical_spacing=0.15 / (1 + n_band_rows),
+                             subplot_titles=[""] + [name for name, _ in bands])
     else:
-        fig, ax = plt.subplots()
-        band_axes = []
+        fig = make_subplots(rows=1, cols=1)
 
     # Scale from what the full RGB view would show for the sample(s)
-    # actually on screen — plot all three reference channels first, let
-    # matplotlib autoscale to them, capture that range, then discard these
-    # lines and draw the channel(s) actually requested. That way a single
-    # flat channel still reads as flat relative to this sample's (or this
-    # comparison's) own real dynamic range, rather than autoscaling to
-    # whatever tiny noise happens to be on screen — and a comparison against
-    # a second sample gets its own range, since both curves feed the autoscale.
-    reference_lines = [ax.plot(_channel_value(curve1, label))[0] for label in ["R", "G", "B"]]
+    # actually on screen, with the same margin matplotlib's autoscale used
+    # to add — so a single flat channel still reads as flat relative to this
+    # sample's (or this comparison's) own real dynamic range, rather than
+    # autoscaling to whatever tiny noise happens to be on screen, and a
+    # comparison against a second sample gets its own range too.
+    reference_values = [_channel_value(curve1, label) for label in ["R", "G", "B"]]
     if curve2 is not None:
-        reference_lines += [ax.plot(_channel_value(curve2, label))[0] for label in ["R", "G", "B"]]
-    ax.relim()
-    ax.autoscale_view()
-    ylim = ax.get_ylim()
-    for line in reference_lines:
-        line.remove()
+        reference_values += [_channel_value(curve2, label) for label in ["R", "G", "B"]]
+    all_ref = np.concatenate(reference_values)
+    if all_ref.size == 0:
+        yrange = [-1.05, 1.05]  # nothing to show (no data for this combo); a stable default
+    else:
+        data_min, data_max = float(np.min(all_ref)), float(np.max(all_ref))
+        margin = 0.05 * (data_max - data_min) if data_max > data_min else 0.05
+        yrange = [data_min - margin, data_max + margin]
 
     for label in labels:
-        ax.plot(_channel_value(curve1, label), color=_CHANNEL_COLORS[label],
-                 label=f"{name1} ({label})", alpha=0.8)
+        fig.add_trace(go.Scatter(y=_channel_value(curve1, label), mode="lines",
+                                  line=dict(color=_CHANNEL_COLORS[label]),
+                                  name=f"{name1} ({label})"), row=1, col=1)
 
     if curve2 is not None:
         for label in labels:
-            ax.plot(_channel_value(curve2, label), color=_CHANNEL_PASTELS[label],
-                     label=f"{name2} ({label})", linestyle="dashed", alpha=1)
-
-    ax.set_ylim(ylim)
-    ax.set_ylabel("d(intensity)/dt, normalized" if show_derivative else "intensity")
-    ax.legend()
+            fig.add_trace(go.Scatter(y=_channel_value(curve2, label), mode="lines",
+                                      line=dict(color=_CHANNEL_PASTELS[label], dash="dash"),
+                                      name=f"{name2} ({label})"), row=1, col=1)
 
     # Each band is resized to `resolution` columns (hptlc.HPTLC_extracter.
     # resolution), the same point count as the curve above, so a column here
-    # lines up with the same x position on the curve.
-    for band_ax, (name, band) in zip(band_axes, bands):
-        band_ax.imshow(band, aspect="auto", extent=[0, band.shape[1], 0, 1])
-        band_ax.set_yticks([])
-        # Title, not a y-label: a long sample name would otherwise get
-        # squeezed into the narrow left margin next to the band.
-        band_ax.set_title(name, loc="left", fontsize=9, pad=2)
+    # lines up with the same x position on the curve — and shared_xaxes
+    # keeps them in sync when zooming/panning the curve.
+    for row_idx, (name, band) in enumerate(bands, start=2):
+        fig.add_trace(go.Image(z=band), row=row_idx, col=1)
+        fig.update_yaxes(visible=False, row=row_idx, col=1)
 
+    fig.update_yaxes(range=yrange, title_text=("d(intensity)/dt, normalized" if show_derivative else "intensity"),
+                      row=1, col=1)
+    fig.update_layout(
+        height=260 + 70 * n_band_rows,
+        margin=dict(l=10, r=10, t=30 if n_band_rows else 10, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
     return fig
