@@ -569,6 +569,47 @@ def _band_data_uri(band):
     return f"data:image/png;base64,{encoded}"
 
 
+def _get_curves(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None,
+                 show_derivative=False):
+    """(curve1, curve2) RGB-triples for name1 (and name2, if given) — after
+    alignment (baked into aligned_curves) and the derivative transform, if
+    requested. The common starting point for plotting, CSV export, and
+    y-axis reference scaling, so none of them can ever disagree about what
+    "the curve" actually is."""
+
+    def get_curve(name):
+        if aligned_curves and name in aligned_curves:
+            c = aligned_curves[name]
+            return c['R'], c['G'], c['B']
+        return HPTLC_extracter.get_display_curve(name, elu, obs, baseline_removed)
+
+    curve1 = get_curve(name1)
+    curve2 = get_curve(name2) if name2 else None
+
+    if show_derivative:
+        curve1 = _derivative_curve(curve1)
+        if curve2 is not None:
+            curve2 = _derivative_curve(curve2)
+
+    return curve1, curve2
+
+
+def get_channel_series(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None,
+                        channels="RGB", show_derivative=False):
+    """{column_name: array} for whichever channel(s) are selected, for
+    name1 (and name2, if given) — exactly the series show_curve plots, so
+    a CSV export built from this can never disagree with what's on screen.
+    Column names are "{name} ({label})", matching the plot's legend."""
+    curve1, curve2 = _get_curves(name1, elu, obs, name2=name2, baseline_removed=baseline_removed,
+                                  aligned_curves=aligned_curves, show_derivative=show_derivative)
+    labels = ["R", "G", "B"] if channels == "RGB" else [channels]
+
+    series = {f"{name1} ({label})": _channel_value(curve1, label) for label in labels}
+    if curve2 is not None:
+        series.update({f"{name2} ({label})": _channel_value(curve2, label) for label in labels})
+    return series
+
+
 def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curves=None, channels="RGB",
                show_bands=False, show_derivative=False):
     """aligned_curves, if given, is the {name: {"R", "G", "B", ...}} dict
@@ -599,19 +640,8 @@ def show_curve(name1, elu, obs, name2=None, baseline_removed=True, aligned_curve
 
     labels = ["R", "G", "B"] if channels == "RGB" else [channels]
 
-    def get_curve(name):
-        if aligned_curves and name in aligned_curves:
-            c = aligned_curves[name]
-            return c['R'], c['G'], c['B']
-        return HPTLC_extracter.get_display_curve(name, elu, obs, baseline_removed)
-
-    curve1 = get_curve(name1)
-    curve2 = get_curve(name2) if name2 else None
-
-    if show_derivative:
-        curve1 = _derivative_curve(curve1)
-        if curve2 is not None:
-            curve2 = _derivative_curve(curve2)
+    curve1, curve2 = _get_curves(name1, elu, obs, name2=name2, baseline_removed=baseline_removed,
+                                  aligned_curves=aligned_curves, show_derivative=show_derivative)
 
     bands = []
     if show_bands:

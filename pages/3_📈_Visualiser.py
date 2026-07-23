@@ -1,5 +1,6 @@
 import os
 
+import pandas as pd
 import streamlit as st
 
 import compare
@@ -82,6 +83,22 @@ with col2:
                             aligned_curves=aligned_curves, channels=channels, show_bands=show_bands,
                             show_derivative=show_derivative)
     st.plotly_chart(fig, use_container_width=True)
+
+    # Built from the same series show_curve just plotted (never re-derived
+    # independently), so it always matches what's on screen — full curves
+    # regardless of any zoom/pan applied in the chart above, since that's
+    # purely a client-side view and never touches this underlying data.
+    series = hptlc.get_channel_series(sample_name, eluant, obs, name2=name2,
+                                       aligned_curves=aligned_curves, channels=channels,
+                                       show_derivative=show_derivative)
+    csv_bytes = pd.DataFrame({col: pd.Series(values) for col, values in series.items()}
+                              ).to_csv(index_label="index").encode("utf-8")
+    filename = "_".join([
+        sample_name, *([f"vs_{name2}"] if name2 else []), eluant, obs, channels,
+        *(["aligned"] if show_alignment else []), *(["derivative"] if show_derivative else []),
+    ]) + ".csv"
+    st.download_button("⬇️ Download as CSV", data=csv_bytes, file_name=filename, mime="text/csv",
+                        use_container_width=True)
 
     if show_alignment:
         shown = [n for n in (sample_name, name2) if n and aligned_curves and n in aligned_curves]
