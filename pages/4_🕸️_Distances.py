@@ -18,26 +18,11 @@ ui.render_header(
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Recompute")
-    if ui.distances_are_stale():
+    if compare.is_recompute_running():
+        st.info("Currently recomputing distances.")
+    elif ui.distances_are_stale():
         st.warning("New or changed data since the last recompute — the graph and "
                    "tables below don't reflect it yet.")
-    if st.button("🔁 Recompute all distances", use_container_width=True):
-        progress = st.progress(0.0, text="Starting...")
-
-        def on_progress(done, total, elu, obs):
-            progress.progress(done / total, text=f"Updating FPCA for {elu} / {obs} ({done}/{total})")
-
-        try:
-            compare.update_all_fpca(progress_callback=on_progress)
-            progress.empty()
-            st.success("Distances recomputed.")
-        except Exception as e:
-            progress.empty()
-            st.error(
-                "Recompute failed — the feature tables in HPTLC_data/features/ look "
-                f"inconsistent and may need to be regenerated ({e})."
-            )
 
     st.subheader("Similarity graph")
     threshold = st.slider(
@@ -68,7 +53,8 @@ with col1:
 with col2:
     st.subheader("Pairwise comparison")
     if not os.path.isfile(f"{DISTANCES_PATH}/average_distances.csv"):
-        st.info("No distances yet — recompute them from the left panel first.")
+        st.info("No distances yet — extract a sample first; distances are recomputed "
+                "automatically afterward.")
     else:
         average_table = pd.read_csv(f"{DISTANCES_PATH}/average_distances.csv")
         current_distances = sorted(average_table.columns[1:])

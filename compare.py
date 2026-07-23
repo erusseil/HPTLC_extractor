@@ -2,6 +2,7 @@ import numpy as np
 import networkx as nx
 import pandas as pd
 import os
+import threading
 import hptlc
 import skfda
 from skfda.preprocessing.dim_reduction import FPCA
@@ -230,6 +231,56 @@ def update_all_fpca(progress_callback=None):
             progress_callback(idx + 1, len(combos), elu, obs)
 
     compute_global_distances()
+
+
+# A full recompute takes long enough at real database sizes (tens of
+# seconds once every eluant/observation combo has data — measured, not
+# guessed) that it can't run synchronously after every single upload
+# without freezing that user's page, and there's no manual trigger anymore
+# either — every extraction just kicks this off in the background. This
+# tiny lock only protects the two flags below (not the recompute itself),
+# so checking is_recompute_running() is always instant.
+_recompute_state_lock = threading.Lock()
+_recompute_running = False
+_recompute_pending = False
+
+
+def is_recompute_running():
+    with _recompute_state_lock:
+        return _recompute_running
+
+
+def recompute_in_background():
+    """Trigger a full recompute without ever blocking the caller — meant to
+    be called right after every extraction. An extraction that lands while
+    one is already running doesn't start a second one racing on the same
+    feature/distance files; it just marks that the database changed again,
+    so the current pass restarts once more with the latest data as soon as
+    it finishes, instead of the new sample being silently left out."""
+    global _recompute_running, _recompute_pending
+
+    with _recompute_state_lock:
+        if _recompute_running:
+            _recompute_pending = True
+            return
+        _recompute_running = True
+
+    def _run():
+        global _recompute_running, _recompute_pending
+        try:
+            while True:
+                update_all_fpca()
+                with _recompute_state_lock:
+                    if not _recompute_pending:
+                        break
+                    _recompute_pending = False
+        finally:
+            with _recompute_state_lock:
+                _recompute_running = False
+                _recompute_pending = False
+
+    threading.Thread(target=_run, daemon=True).start()
+
 
 def compute_specific_distances():
 

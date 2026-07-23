@@ -3,6 +3,7 @@ import os
 import streamlit as st
 from PIL import Image, ImageDraw
 
+import compare
 import hptlc
 import ui
 
@@ -56,6 +57,9 @@ def run_extraction(files_info, names, length, front, X_offset, Y_offset, inter_s
             st.error(f"{filename} — failed: {err}")
 
     if any(ok for _, ok, _ in results):
+        compare.recompute_in_background()
+        st.info("Currently recomputing distances — the Distances page will update "
+                 "automatically once it's done.")
         st.page_link("pages/3_📈_Visualiser.py", label="→ Go check the extracted curves", icon="📈")
 
 
